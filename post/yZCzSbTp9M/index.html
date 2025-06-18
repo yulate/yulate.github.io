@@ -1,0 +1,482 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+<title>击碎共识：从 Raft Leader 劫持到分布式系统接管 文字版 - yulate&#39;s blog</title>
+<link rel="shortcut icon" href="https://yulate.github.io/favicon.ico">
+<link href="https://cdn.jsdelivr.net/npm/remixicon@2.2.0/fonts/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.7.2/animate.min.css">
+<link rel="stylesheet" href="https://yulate.github.io/media/css/tailwind.css">
+<link rel="stylesheet" href="https://yulate.github.io/styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="击碎共识：从 Raft Leader 劫持到分布式系统接管 文字版 - yulate&#39;s blog - Atom Feed" href="https://yulate.github.io/atom.xml">
+
+    
+
+  <meta name="description" content="0x00 议题标题 &amp;amp; 基础信息
+议题标题
+
+Hacking Raft Protocol
+击碎共识：从 Raft Leader 劫持到分布式系统接管（个人觉得这个最好）
+分布式共识困境：Raft 集群无感接管与反序列化利用链
+当 R..." />
+  <meta property="og:title" content="击碎共识：从 Raft Leader 劫持到分布式系统接管 文字版 - yulate&#39;s blog">
+  <meta property="og:description" content="0x00 议题标题 &amp;amp; 基础信息
+议题标题
+
+Hacking Raft Protocol
+击碎共识：从 Raft Leader 劫持到分布式系统接管（个人觉得这个最好）
+分布式共识困境：Raft 集群无感接管与反序列化利用链
+当 R..." />
+  <meta property="og:type" content="articles">
+  <meta property="og:url" content="https://yulate.github.io/post/yZCzSbTp9M/" />
+  <meta property="og:image" content="https://yulate.github.io/images/avatar.png">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:width" content="1200">
+  <meta name="twitter:title" content="击碎共识：从 Raft Leader 劫持到分布式系统接管 文字版 - yulate&#39;s blog">
+  <meta name="twitter:description" content="0x00 议题标题 &amp;amp; 基础信息
+议题标题
+
+Hacking Raft Protocol
+击碎共识：从 Raft Leader 劫持到分布式系统接管（个人觉得这个最好）
+分布式共识困境：Raft 集群无感接管与反序列化利用链
+当 R...">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://yulate.github.io/post/yZCzSbTp9M/">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/default-skin/default-skin.css">
+ 
+  
+    <link rel="stylesheet" href="https://yulate.github.io/media/css/prism-atom-dark.css">
+  
+
+  
+</head>
+
+<body>
+  <div class="antialiased flex flex-col min-h-screen" id="app">
+    <a href="https://yulate.github.io" class="fixed top-0 left-0 mt-4 bg-black text-white dark:text-gray-700 dark:bg-yellow-50 dark:hover:bg-black dark:hover:text-white inline-flex p-2 pl-8 hover:text-gray-700 hover:bg-yellow-50 font-bold z-10 transition-fast animated fadeInLeft">
+      yulate&#39;s blog
+    </a>
+    <div class="max-w-4xl w-full mx-auto">
+      <div class="shadow-box bg-white dark:bg-gray-600 rounded-lg pt-32 md:pt-64 px-4 md:px-8 pb-8 animated fadeIn mb-8">
+        <h1 class="text-5xl font-semibold leading-normal pb-8 mb-8 border-b-8 border-gray-700">
+          击碎共识：从 Raft Leader 劫持到分布式系统接管 文字版
+        </h1>
+        
+        <div class="mb-8 flex flex-wrap">
+          <div class="text-gray-400 text-sm mr-4">2025-03-03 · 7 min read</div>
+          
+        </div>
+        <div class="markdown mb-8" v-pre>
+          <h1 id="0x00-议题标题-基础信息">0x00 议题标题 &amp; 基础信息</h1>
+<p>议题标题</p>
+<ol>
+<li>Hacking Raft Protocol</li>
+<li>击碎共识：从 Raft Leader 劫持到分布式系统接管（个人觉得这个最好）</li>
+<li>分布式共识困境：Raft 集群无感接管与反序列化利用链</li>
+<li>当 Raft 遇上反序列化：Apache 生态圈多个组件命令执行漏洞分析</li>
+<li>......</li>
+</ol>
+<p>议题简介：<br>
+本议题深入探讨了分布式系统中 Raft 共识协议的安全缺陷。通过分析 Raft 的信任假设模型，揭示了其在面对恶意节点时的脆弱性。我们以 Apache Ignite 3 Raft 为例，详细阐述了 Leader 节点劫持的攻击方法，并结合多个 Apache 项目的实际案例，展示了从 Leader 劫持到远程代码执行的完整攻击链。本研究不仅揭示了分布式共识协议的安全隐患，也为相关项目的安全加固提供了参考。</p>
+<h1 id="0x01-raft-协议介绍">0x01 Raft 协议介绍</h1>
+<p>简单介绍 Raft 协议的原理, 以及 Raft 协议的拜占庭问题 (无法防范恶意节点)</p>
+<ol>
+<li>角色划分
+<ol>
+<li>Leader(领导者): 处理所有客户端请求,管理日志复制</li>
+<li>Follower(跟随者): 接收并响应来自 Leader 的请求</li>
+<li>Candidate(候选人): 在选举过程中的临时角色</li>
+</ol>
+</li>
+<li>任期(Term)概念
+<ol>
+<li>时间按任期划分，编号递增</li>
+<li>每个任期最多一个 Leader</li>
+<li>Leader 失效则开始新任期选举</li>
+</ol>
+</li>
+<li>Leader 选举过程
+<ol>
+<li>Follower 超时未收到心跳转为 Candidate</li>
+<li>获得多数票的 Candidate 成为新 Leader</li>
+<li>Leader 通过心跳维持领导地位</li>
+</ol>
+</li>
+<li>日志复制机制
+<ol>
+<li>Leader 接收请求并复制到 Follower</li>
+<li>多数确认后提交并响应客户端</li>
+</ol>
+</li>
+<li>安全性保证
+<ol>
+<li>选举限制:只有包含所有已提交日志的节点才能当选 Leader</li>
+<li>日志匹配:如果两个日志条目有相同的索引和任期,则它们之前的所有日志都相同</li>
+<li>Leader 完整性:如果一个日志条目在某个任期被提交,那么这个条目会出现在后续任期的所有 Leader 日志中</li>
+</ol>
+</li>
+</ol>
+<p>算法缺陷：<br>
+Raft 会假设所有的节点都是“诚实”的，即使出错也是简单的崩溃(Crash-fail)模型，节点要么正常工作，要么完全停止，不会出现恶意行为，网络通信可能延迟、丢包，但不会被篡改或伪造。<br>
+这到导致了该算法在默认的情况下无法控制集群机器的加入与选举流程，当恶意节点自行修改自身属性与权重时，会触发恶意leader抢占出现风险。</p>
+<h1 id="0x02-raft-协议抢占-leader-原理">0x02 Raft 协议抢占 Leader 原理</h1>
+<p>基于 https://github.com/sofastack/sofa-jraft 对 Raft 协议的实现, 引入攻击手法, 给出示例代码</p>
+<p>Jraft 协议选举机制：</p>
+<ul>
+<li>基于term递增的选举流程</li>
+<li>NodeImpl中的状态转化</li>
+<li>默认的Leader变更流程</li>
+</ul>
+<p>攻击思路：</p>
+<ul>
+<li>Term 值可被修改</li>
+<li>状态机可被强制转换</li>
+<li>配置信息可被覆盖<br>
+核心步骤</li>
+<li>注入高term值抢占优势</li>
+<li>强制状态机转换为CANDIDATE</li>
+<li>直接调用becomeLeader 方法强制开始选举</li>
+<li>同步快照维持控制</li>
+</ul>
+<p>示例代码：</p>
+<pre><code class="language-java">// 1. 初始化恶意节点
+RouteTable rt = RouteTable.getInstance();
+Configuration conf = new Configuration();
+PeerId evilPeerId = new PeerId(&quot;127.0.0.1:5555&quot;);
+
+// 2. 修改 term 获取选举优势
+Field termField = NodeImpl.class.getDeclaredField(&quot;currTerm&quot;);
+termField.setAccessible(true);
+termField.set(jraftServer.getNode(), 200031);
+
+// 3. 强制状态转换
+Field stateField = NodeImpl.class.getDeclaredField(&quot;state&quot;);
+stateField.setAccessible(true);
+stateField.set(jraftServer.getNode(), State.STATE_CANDIDATE);
+
+// 4. 直接成为 Leader
+Method becomeLeaderMethod = NodeImpl.class.getDeclaredMethod(&quot;becomeLeader&quot;);
+becomeLeaderMethod.setAccessible(true);
+becomeLeaderMethod.invoke(jraftServer.getNode());
+
+// 5. 快照同步维持控制
+snapshotMethod.invoke(jraftServer.getNode(), (Closure) null);
+</code></pre>
+<p>攻击效果</p>
+<ul>
+<li>绕过正常选举流程</li>
+<li>强制获取 Leader 身份</li>
+<li>通过快照同步维持控制</li>
+</ul>
+<h1 id="0x03-漏洞案例">0x03 漏洞案例</h1>
+<p>基于上面的攻击手法, 讲解开源项目中的几个实际漏洞案例<br>
+漏洞利用手法主要分为两个部分: 针对 Raft 集群的攻击 (抢占 Leader) + 反序列化利用 (拿到 Leader 权限之后下发 Task)</p>
+<ol>
+<li>Apache Seata Raft Jackson 反序列化 RCE</li>
+<li>Apache HugeGraph Raft 反序列化 RCE</li>
+<li>Apache Ignite 3 Raft 反序列化 RCE</li>
+<li>Apache EventMesh Raft Hessian 反序列化 RCE</li>
+</ol>
+<p>漏洞案例分析可以分为如下模块：</p>
+<ul>
+<li>漏洞利用总体思路</li>
+<li>挑出一个案例详细分析</li>
+<li>其他案例对比分析</li>
+<li>漏洞共性总结</li>
+<li>修复方案分析</li>
+</ul>
+<p>漏洞利用整体思路<br>
+在 JRaft 的实现中，状态机接口 StateMachine 的 onApply 方法负责处理所有节点的数据同步。当 Leader 节点下发数据时，集群中所有节点都会触发该方法进行数据处理。<br>
+在Apache 等使用jraft实现共识集群或者其他项目中，漏洞存在于 MetaStateMachine#onApply 方法中，核心问题：</p>
+<ul>
+<li>onApply 方法的参数内容完全可控</li>
+<li>大多数项目使用序列化方式处理通信数据</li>
+<li>反序列化过程缺乏有效的安全校验<br>
+以Apache EventMesh 为例：</li>
+<li>使用Hessian2 作为反序列化器</li>
+<li>反序列化数据直接来源于RPC请求</li>
+<li>Hessian 3.3.6 版本存在已知绕过方式</li>
+</ul>
+<p>而利用该漏洞就需要达成如下前置条件：</p>
+<ul>
+<li>需要成为集群的 Leader 节点</li>
+<li>需要构造有效的通信数据</li>
+<li>需要绕过反序列化限制<br>
+综合如上分析可以得出如下攻击路径</li>
+</ul>
+<ol>
+<li>伪造节点加入 Raft 集群</li>
+<li>通过高 term 值强制获取 Leader 身份</li>
+<li>利用 Leader 权限下发恶意序列化数据</li>
+<li>触发所有节点执行 onApply 反序列化</li>
+</ol>
+<p>挑出一个案例详细分析<br>
+Apache eventmesh raft leader Preemption and Hessian Deserialization Vulnerability<br>
+https://www.yulate.com/post/eDeIu1qZbN/</p>
+<p>漏洞共性总结</p>
+<ol>
+<li>架构层面
+<ol>
+<li>Raft 协议对节点无验证机制</li>
+<li>Leader 节点权限过大</li>
+<li>集群通信缺乏加密</li>
+</ol>
+</li>
+<li>实现层面
+<ol>
+<li>使用不安全的序列化方案</li>
+<li>通信数据未做有效校验</li>
+<li>反序列化过程缺乏防护</li>
+</ol>
+</li>
+<li>影响范围
+<ol>
+<li>影响使用 Raft 的分布式系统</li>
+<li>可导致远程代码执行</li>
+<li>可控制整个集群</li>
+</ol>
+</li>
+</ol>
+<p>修复方案分析<br>
+实现节点身份认证与准入机制，更新并加固序列化组件，增加通信加密与数据校验。同时建议配置网络访问控制，合理规划部署节点以降低风险。</p>
+<h1 id="0x04-todo">0x04 TODO</h1>
+<p>理论上其它语言的 Raft 也会存在这种问题? 可以结合不同语言的特性进行利用<br>
+例如 C 语言服务抢占 Leader 节点之后下发 Task, 集群内节点在处理 Task 的时候可能存在栈溢出/堆溢出/UAF?<br>
+或者项目在使用 Raft 协议处理 Task 的时候定义了不同的 Command 类型, 也许可以利用项目本身的 Command 操作进行利用</p>
+<p>apache ratis 是否能打<br>
+https://github.com/search?q=repo%3Aapache%2Fratis+readObject&amp;type=code</p>
+
+        </div>
+        <!-- Share to Twitter, Weibo, Telegram -->
+        <div class="flex items-center">
+          <div class="mr-4 flex items-center">
+            <i class="ri-share-forward-line text-gray-500"></i>
+          </div>
+          <div class="px-4 cursor-pointer text-blue-500 hover:bg-blue-100 dark:hover:bg-gray-600 inline-flex" @click="shareToTwitter">
+            <i class="ri-twitter-line"></i>
+          </div>
+          <div class="px-4 cursor-pointer text-red-500 hover:bg-red-100 dark:hover:bg-gray-600 inline-flex" @click="shareToWeibo">
+            <i class="ri-weibo-line"></i>
+          </div>
+          <div class="px-4 cursor-pointer text-indigo-500 hover:bg-indigo-100 dark:hover:bg-gray-600 inline-flex" @click="shareToTelegram">
+            <i class="ri-telegram-line"></i>
+          </div>
+        </div>
+      </div>
+
+      
+
+      
+        <div id="vlaine-comment"></div>
+      
+
+      <footer class="py-12 text-center px-4 md:px-0" v-pre>
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+</footer>
+    </div>
+
+    <!-- TOC Container -->
+    <div class="fixed right-0 bottom-0 mb-16 mr-4 shadow w-8 h-8 rounded-full flex justify-center items-center z-10 cursor-pointer bg-white dark:bg-gray-500 dark:text-gray-200 hover:shadow-lg transition-all animated fadeInRight" @click="showToc = true">
+      <i class="ri-file-list-line"></i>
+    </div>
+
+    <div class="fixed right-0 top-0 bottom-0 overflow-y-auto w-64 bg-white dark:bg-gray-800 p-4 border-l border-gray-100 dark:border-gray-600 z-10 transition-fast" :class="{ '-mr-64': !showToc }">
+      <div class="flex mb-4 justify-end">
+        <div class="w-8 h-8 inline-flex justify-center items-center rounded-full cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-fast" @click="showToc = false">
+          <i class="ri-close-line text-lg"></i>
+        </div>
+      </div>
+      <div class="post-toc-container">
+        <ul class="markdownIt-TOC">
+<li><a href="#0x00-%E8%AE%AE%E9%A2%98%E6%A0%87%E9%A2%98-%E5%9F%BA%E7%A1%80%E4%BF%A1%E6%81%AF">0x00 议题标题 &amp; 基础信息</a></li>
+<li><a href="#0x01-raft-%E5%8D%8F%E8%AE%AE%E4%BB%8B%E7%BB%8D">0x01 Raft 协议介绍</a></li>
+<li><a href="#0x02-raft-%E5%8D%8F%E8%AE%AE%E6%8A%A2%E5%8D%A0-leader-%E5%8E%9F%E7%90%86">0x02 Raft 协议抢占 Leader 原理</a></li>
+<li><a href="#0x03-%E6%BC%8F%E6%B4%9E%E6%A1%88%E4%BE%8B">0x03 漏洞案例</a></li>
+<li><a href="#0x04-todo">0x04 TODO</a></li>
+</ul>
+
+      </div>
+    </div>
+
+    <!-- Back to top -->
+    <div class="fixed right-0 bottom-0 mb-4 mr-4 shadow w-8 h-8 rounded-full flex justify-center items-center z-10 cursor-pointer bg-white hover:shadow-lg transition-all dark:bg-gray-500 dark:text-gray-200" @click="backToUp" v-show="scrolled">
+      <i class="ri-arrow-up-line"></i>
+    </div>
+  </div>
+
+  <!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+  <!-- Background of PhotoSwipe. 
+        It's a separate element as animating opacity is faster than rgba(). -->
+  <div class="pswp__bg">
+  </div>
+  <!-- Slides wrapper with overflow:hidden. -->
+  <div class="pswp__scroll-wrap">
+    <!-- Container that holds slides. 
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+    <div class="pswp__container">
+      <div class="pswp__item">
+      </div>
+      <div class="pswp__item">
+      </div>
+      <div class="pswp__item">
+      </div>
+    </div>
+    <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+    <div class="pswp__ui pswp__ui--hidden">
+      <div class="pswp__top-bar">
+        <!--  Controls are self-explanatory. Order can be changed. -->
+        <div class="pswp__counter">
+        </div>
+        <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+        <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+        <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+        <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+        <!-- element will get class pswp__preloader--active when preloader is running -->
+        <div class="pswp__preloader">
+          <div class="pswp__preloader__icn">
+            <div class="pswp__preloader__cut">
+              <div class="pswp__preloader__donut">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+        <div class="pswp__share-tooltip">
+        </div>
+      </div>
+      <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+      </button>
+      <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+      </button>
+      <div class="pswp__caption">
+        <div class="pswp__caption__center">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+  <script src="https://yulate.github.io/media/scripts/main.js"></script>
+  
+  <!-- Code Highlight -->
+  
+    <script src="https://yulate.github.io/media/prism.js"></script>
+    <script>
+      Prism.highlightAll()
+    </script>
+  
+
+  <script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/photoswipe@4.1.3/dist/photoswipe-ui-default.min.js"></script>
+  <script>
+    //拿到预览框架，也就是上面的html代码
+    var pswpElement = document.querySelectorAll('.pswp')[0];
+    //定义图片数组变量
+    var imgitems;
+    /**
+    * 用于显示预览界面
+    * @param index 图片数组下标
+    */
+    function viewImg(index) {
+      //其它选项这里不做过多阐述，详情见官网
+      var pswpoptions = {
+        index: parseInt(index, 10), // 开始幻灯片索引。0是第一张幻灯片。必须是整数，而不是字符串。
+        bgOpacity: 0.7, // 背景透明度，0-1
+        maxSpreadZoom: 3, // 缩放级别，不要太大
+      };
+      //初始化并打开PhotoSwipe，pswpElement对应上面预览框架，PhotoSwipeUI_Default为皮肤，imgitems为图片数组，pswpoptions为选项
+      var gallery = new PhotoSwipe(pswpElement, PhotoSwipeUI_Default, imgitems, pswpoptions);
+      gallery.init()
+    }
+    /**
+    * 用于添加图片点击事件
+    * @param img 图片元素
+    * @param index 所属下标（在imgitems中的位置）
+    */
+    function addImgClick(img, index) {
+      img.onclick = function() {
+        viewImg(index)
+      }
+    }
+    /**
+    * 轮询所有图片，获取src、width、height等数据，加入imgitems，并给图片元素添加事件
+    * 最好在onload中执行该方法，本站因放在最底部，所以直接初始化
+    * 异步加载图片可在图片元素创建完成后调用此方法
+    */
+    function initImg() {
+      //重置图片数组
+      imgitems = [];
+      //查找class:markdown 下的所有img元素并遍历
+      var imgs = document.querySelectorAll('.markdown img');
+      for (var i = 0; i < imgs.length; i++) {
+        var img = imgs[i];
+        //本站相册初始为loading图片，真实图片放在data-src
+        var ds = img.getAttribute("data-src");
+        //创建image对象，用于获取图片宽高
+        var imgtemp = new Image();
+        //判断是否存在data-src
+        if (ds != null && ds.length > 0) {
+          imgtemp.src = ds
+        } else {
+          imgtemp.src = img.src
+        }
+        //判断是否存在缓存
+        if (imgtemp.complete) {
+          var imgobj = {
+            "src": imgtemp.src,
+            "w": imgtemp.width,
+            "h": imgtemp.height,
+          };
+          imgitems[i] = imgobj;
+          addImgClick(img, i);
+        } else {
+          console.log('进来了2')
+          imgtemp.index = i;
+          imgtemp.img = img;
+          imgtemp.onload = function() {
+            var imgobj = {
+              "src": this.src,
+              "w": this.width,
+              "h": this.height,
+            };
+            //不要使用push，因为onload前后顺序会不同
+            imgitems[this.index] = imgobj
+            //添加点击事件
+            addImgClick(this.img, this.index);
+          }
+        }
+      }
+    }
+    //初始化
+    initImg();
+  </script>
+  
+    <script type="application/javascript" src="https://unpkg.com/valine"></script>
+<script type="application/javascript">
+  new Valine({
+    el: '#vlaine-comment',
+    appId: '2TlPRQUYNcF2YZZrESw4Ixr8-gzGzoHsz',
+    appKey: 'pRAtmeZWCUzNZ3MHKwdY9Igk',
+    pageSize: 10,
+    notify: true,
+    avatar: 'mp',
+    verify: true,
+    placeholder: '来都来了，不妨评论一下',
+    visitor: true,
+    highlight: false,
+    recordIP: true,
+  })
+</script>
+  
+  
+</body>
+
+</html>
